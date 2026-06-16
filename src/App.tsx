@@ -258,7 +258,7 @@ function App() {
               <div className="record-index">{String(index + 1).padStart(2, "0")}</div>
               <div>
                 <h3>{record.name}</h3>
-                <p>{[record.spec, record.origin, record.category, formatRecordText(record)].join(" · ")}</p>
+                <p>{[record.spec, record.origin, record.category, `有效期${record.expiry}`, formatRecordText(record)].join(" · ")}</p>
               </div>
             </article>
           ))}
