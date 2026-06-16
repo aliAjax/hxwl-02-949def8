@@ -92,6 +92,52 @@ const emptyForm: Record<string, string> = {
 
 const statusColors = ["status-ok", "status-watch", "status-danger"];
 
+function getStockStatus(record: InventoryRecord): string {
+  const today = new Date();
+  const expiryDate = new Date(record.expiry);
+  const diffDays = Math.ceil(
+    (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (diffDays <= 0) return "已过期";
+  if (diffDays <= 60) return "近效期";
+  if (record.stockGrams < 1200) return "低库存";
+  return "正常";
+}
+
+function exportSummary(records: InventoryRecord[]) {
+  const headers = [
+    "饮片名称",
+    "炮制规格",
+    "产地",
+    "功效分类",
+    "批号",
+    "库存克数",
+    "有效期",
+    "库存状态",
+  ];
+  const rows = records.map((r) => [
+    r.name,
+    r.spec,
+    r.origin,
+    r.category,
+    r.batch,
+    String(r.stockGrams),
+    r.expiry,
+    getStockStatus(r),
+  ]);
+  const csvContent =
+    "\uFEFF" +
+    [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const today = new Date().toISOString().slice(0, 10);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `库存摘要_${today}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function MetricCard({ label, value, index }: { label: string; value: string; index: number }) {
   return (
     <article className="metric-card">
@@ -278,7 +324,7 @@ function App() {
             <p>入库数据</p>
             <h2>近期记录</h2>
           </div>
-          <button>导出摘要</button>
+          <button className="primary-action" onClick={() => exportSummary(filteredRecords)}>导出摘要</button>
         </div>
         <div className="record-list">
           {filteredRecords.length > 0 ? (
