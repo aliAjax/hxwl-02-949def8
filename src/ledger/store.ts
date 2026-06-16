@@ -346,7 +346,7 @@ interface SeedMovement {
 }
 
 function buildBatch(
-  base: Omit<BatchLedgerDTO, "updatedAt" | keyof BaseEntity>,
+  base: Omit<BatchLedgerDTO, "updatedAt" | "isDeleted" | "syncStatus" | "serverId">,
   movements: SeedMovement[]
 ): { batch: BatchLedgerDTO; ops: LedgerOperationDTO[] } {
   let balance = 0;
