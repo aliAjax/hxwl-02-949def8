@@ -223,6 +223,22 @@ input {
   color: #172033;
 }
 
+.input-error {
+  border-color: #e11d48;
+  background: #fff5f7;
+}
+
+.required-mark {
+  color: #e11d48;
+  margin-left: 4px;
+}
+
+.error-text {
+  color: #e11d48;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .record-list {
   display: grid;
   gap: 12px;
