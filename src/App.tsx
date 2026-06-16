@@ -111,6 +111,7 @@ function App() {
   const [formData, setFormData] = useState<Record<string, string>>({ ...emptyForm });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [records, setRecords] = useState<InventoryRecord[]>([...project.initialRecords]);
+  const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -165,6 +166,22 @@ function App() {
     setErrors({});
   };
 
+  const toggleFilter = (filter: string) => {
+    setSelectedFilters((prev) =>
+      prev.includes(filter)
+        ? prev.filter((f) => f !== filter)
+        : [...prev, filter]
+    );
+  };
+
+  const clearFilters = () => {
+    setSelectedFilters([]);
+  };
+
+  const filteredRecords = selectedFilters.length === 0
+    ? records
+    : records.filter((record) => selectedFilters.includes(record.category));
+
   const formatRecordText = (record: InventoryRecord): string => {
     const today = new Date();
     const expiryDate = new Date(record.expiry);
@@ -208,11 +225,22 @@ function App() {
             ))}
           </div>
           <h2>筛选</h2>
-          <div className="chips muted">
+          <div className="chips filter-chips">
             {project.filters.map((filter: string) => (
-              <button key={filter}>{filter}</button>
+              <button
+                key={filter}
+                className={selectedFilters.includes(filter) ? "filter-active" : ""}
+                onClick={() => toggleFilter(filter)}
+              >
+                {filter}
+              </button>
             ))}
           </div>
+          {selectedFilters.length > 0 && (
+            <button className="clear-filter" onClick={clearFilters}>
+              清空筛选
+            </button>
+          )}
         </aside>
 
         <section className="panel">
@@ -253,15 +281,28 @@ function App() {
           <button>导出摘要</button>
         </div>
         <div className="record-list">
-          {records.map((record: InventoryRecord, index: number) => (
-            <article key={`${record.batch}-${index}`} className="record-card">
-              <div className="record-index">{String(index + 1).padStart(2, "0")}</div>
-              <div>
-                <h3>{record.name}</h3>
-                <p>{[record.spec, record.origin, record.category, `有效期${record.expiry}`, formatRecordText(record)].join(" · ")}</p>
-              </div>
-            </article>
-          ))}
+          {filteredRecords.length > 0 ? (
+            filteredRecords.map((record: InventoryRecord, index: number) => (
+              <article key={`${record.batch}-${index}`} className="record-card">
+                <div className="record-index">{String(index + 1).padStart(2, "0")}</div>
+                <div>
+                  <h3>{record.name}</h3>
+                  <p>{[record.spec, record.origin, record.category, `有效期${record.expiry}`, formatRecordText(record)].join(" · ")}</p>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div className="empty-state">
+              <div className="empty-icon">📋</div>
+              <h3>暂无匹配记录</h3>
+              <p>当前筛选条件下没有找到符合的饮片记录</p>
+              {selectedFilters.length > 0 && (
+                <button className="clear-filter" onClick={clearFilters}>
+                  清除筛选条件
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </section>
     </main>

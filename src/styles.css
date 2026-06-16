@@ -181,8 +181,69 @@ label span {
   background: color-mix(in srgb, var(--primary) 8%, #ffffff);
 }
 
-.chips.muted button {
+.filter-chips button {
   background: #ffffff;
+  border: 1px solid var(--border);
+  color: #526070;
+  transition: all 0.15s ease;
+}
+
+.filter-chips button:hover {
+  border-color: color-mix(in srgb, var(--primary) 28%, #dbe3ef);
+  background: color-mix(in srgb, var(--primary) 8%, #ffffff);
+}
+
+.filter-chips button.filter-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.clear-filter {
+  width: 100%;
+  background: #ffffff;
+  border: 1px dashed var(--border);
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 24px;
+  transition: all 0.15s ease;
+}
+
+.clear-filter:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, #ffffff);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  color: #172033;
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+
+.empty-state p {
+  color: #64748b;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.empty-state .clear-filter {
+  width: auto;
+  margin-bottom: 0;
 }
 
 .section-heading {
