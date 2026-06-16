@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./styles.css";
+import LedgerModule from "./ledger/LedgerModule";
 
 interface InventoryRecord {
   name: string;
@@ -169,6 +170,7 @@ function App() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [records, setRecords] = useState<InventoryRecord[]>([...project.initialRecords]);
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [tab, setTab] = useState<"entry" | "ledger">("entry");
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -267,6 +269,25 @@ function App() {
         </div>
       </section>
 
+      <nav className="tab-bar">
+        <button
+          className={tab === "entry" ? "tab tab-active" : "tab"}
+          onClick={() => setTab("entry")}
+        >
+          库存录入看板
+        </button>
+        <button
+          className={tab === "ledger" ? "tab tab-active" : "tab"}
+          onClick={() => setTab("ledger")}
+        >
+          批号库存台账
+        </button>
+      </nav>
+
+      {tab === "ledger" ? (
+        <LedgerModule />
+      ) : (
+        <>
       <section className="metrics-grid">
         {project.metrics.map((metric: string, index: number) => (
           <MetricCard key={metric} label={metric} value={values[index]} index={index} />
@@ -362,6 +383,8 @@ function App() {
           )}
         </div>
       </section>
+        </>
+      )}
     </main>
   );
 }
