@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import "./styles.css";
 import LedgerModule from "./ledger/LedgerModule";
 import ExpiryAlertModule from "./ledger/ExpiryAlertModule";
@@ -8,8 +8,6 @@ import RoleWorkspaceModule from "./ledger/RoleWorkspaceModule";
 import {
   BatchLedgerDTO,
   checkBatchNoExists,
-  createSeedState,
-  createSeedSafetyStockState,
   selectAllBatches,
   selectAllSafetyStockRules,
   selectCurrentStock,
@@ -19,6 +17,7 @@ import {
   useSafetyStockStore,
 } from "./ledger/store";
 import { LOW_STOCK_GRAMS, NEAR_EXPIRY_DAYS } from "./ledger/types";
+import { InventoryService } from "./ledger/db/inventoryService";
 
 interface InventoryRecord {
   name: string;
@@ -34,8 +33,8 @@ const project = {
   "id": "hxwl-02",
   "port": 5102,
   "title": "中药饮片库存",
-  "subtitle": "按批号、炮制规格与近效期管理饮片周转",
-  "stack": "React + Vite + TypeScript + CSS",
+  "subtitle": "按批号、炮制规格与近效期管理饮片周转（IndexedDB 本地持久化）",
+  "stack": "React + Vite + TypeScript + CSS + IndexedDB",
   "theme": [
     "#166534",
     "#b45309",
@@ -70,35 +69,6 @@ const project = {
     { key: "operator", label: "操作人" },
     { key: "remark", label: "备注" }
   ] as const,
-  "initialRecords": [
-    {
-      name: "黄芪",
-      spec: "蜜炙",
-      origin: "甘肃",
-      batch: "HQ2603",
-      expiry: "2026-12-31",
-      stockGrams: 8200,
-      category: "补气"
-    },
-    {
-      name: "金银花",
-      spec: "生品",
-      origin: "河南",
-      batch: "JYH2509",
-      expiry: "2026-08-04",
-      stockGrams: 3500,
-      category: "清热"
-    },
-    {
-      name: "丹参",
-      spec: "切片",
-      origin: "山东",
-      batch: "DS2601",
-      expiry: "2027-03-15",
-      stockGrams: 980,
-      category: "活血"
-    }
-  ] as InventoryRecord[]
 };
 
 const emptyForm: Record<string, string> = {
@@ -185,11 +155,14 @@ function MetricCard({ label, value, index }: { label: string; value: string; ind
 }
 
 function App() {
-  const ledgerStore = useLedgerStore(createSeedState);
+  const ledgerStore = useLedgerStore();
   const { state: ledgerState, addBatch } = ledgerStore;
 
-  const safetyStockStore = useSafetyStockStore(createSeedSafetyStockState);
+  const safetyStockStore = useSafetyStockStore();
   const { state: safetyStockState } = safetyStockStore;
+
+  const { storeState: invStoreState, clearWriteError, resetAll, exportSnapshot } =
+    ledgerStore.inventoryStore;
 
   const lowStockHerbCount = useMemo(
     () => selectLowStockHerbCountWithRules(ledgerState, safetyStockState),
@@ -212,6 +185,7 @@ function App() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock" | "workspace">("workspace");
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const records = useMemo<InventoryRecord[]>(() => {
     const batches = selectAllBatches(ledgerState);
@@ -332,8 +306,60 @@ function App() {
     return `批号${record.batch}，库存${record.stockGrams}g`;
   };
 
+  const handleExportFull = useCallback(async () => {
+    const snapshot = await exportSnapshot();
+    if (!snapshot) return;
+    const json = JSON.stringify(snapshot, null, 2);
+    const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `IndexedDB库存完整数据_${formatLocalDate(new Date())}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [exportSnapshot]);
+
+  const handleReset = useCallback(async () => {
+    const result = await resetAll();
+    if (!result.ok) {
+      alert(`重置失败：${result.error || "未知错误"}`);
+    }
+    setShowResetConfirm(false);
+  }, [resetAll]);
+
   return (
     <main className="app-shell">
+      {invStoreState.loading && (
+        <div className="global-loading">
+          <div className="loading-spinner" />
+          <p>正在加载本地数据库...</p>
+        </div>
+      )}
+
+      {invStoreState.dbError && (
+        <div className="error-banner db-error">
+          <div className="error-banner-content">
+            <strong>数据库错误：</strong>
+            <span>{invStoreState.dbError}</span>
+          </div>
+          <button className="close-banner" onClick={() => clearWriteError()}>
+            ×
+          </button>
+        </div>
+      )}
+
+      {invStoreState.writeError && (
+        <div className="error-banner write-error">
+          <div className="error-banner-content">
+            <strong>操作提示：</strong>
+            <span>{invStoreState.writeError}</span>
+          </div>
+          <button className="close-banner" onClick={() => clearWriteError()}>
+            ×
+          </button>
+        </div>
+      )}
+
       <section className="hero">
         <div>
           <p className="eyebrow">{project.id} · port {project.port}</p>
@@ -343,8 +369,37 @@ function App() {
         <div className="stack-card">
           <span>技术栈</span>
           <strong>{project.stack}</strong>
+          <div className="db-actions">
+            <button className="mini-btn" onClick={handleExportFull} title="导出 IndexedDB 完整快照">
+              📤 导出数据
+            </button>
+            <button
+              className="mini-btn mini-danger"
+              onClick={() => setShowResetConfirm(true)}
+              title="清空并重新初始化示例数据"
+            >
+              🔄 重置数据
+            </button>
+          </div>
         </div>
       </section>
+
+      {showResetConfirm && (
+        <div className="modal-overlay" onClick={() => setShowResetConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>确认重置所有数据？</h3>
+            <p>此操作将清空本地数据库并恢复为初始示例数据，所有修改将丢失且无法恢复。</p>
+            <div className="modal-actions">
+              <button className="clear-filter" onClick={() => setShowResetConfirm(false)}>
+                取消
+              </button>
+              <button className="primary-action danger-btn" onClick={handleReset}>
+                确认重置
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="tab-bar">
         <button
@@ -437,6 +492,12 @@ function App() {
               清空筛选
             </button>
           )}
+          <h2>数据持久化</h2>
+          <div className="db-hint">
+            <p>💾 所有数据自动保存至浏览器本地 IndexedDB</p>
+            <p>📦 刷新页面后数据不会丢失</p>
+            <p>🔒 数据仅保存在本地浏览器中</p>
+          </div>
         </aside>
 
         <section className="panel">

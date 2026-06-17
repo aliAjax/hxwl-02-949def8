@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertLevel,
   AUDIT_LOG_LABELS,
@@ -23,6 +23,10 @@ import {
   SyncStatus,
   WARNING_EXPIRY_DAYS_30,
 } from "./types";
+import { useInventoryStore } from "./db/useInventoryStore";
+import type { InventoryStore } from "./db/useInventoryStore";
+import { InventoryService } from "./db/inventoryService";
+import { BatchRepository, OperationRepository } from "./db/repositories";
 
 export function createId(prefix: string): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -639,33 +643,70 @@ export function createSeedState(): LedgerState {
   };
 }
 
-export function useLedgerStore(initial?: LedgerState | (() => LedgerState)) {
-  const [state, setState] = useState<LedgerState>(() => {
-    if (typeof initial === "function") {
-      return (initial as () => LedgerState)();
-    }
-    return initial ?? createEmptyState();
-  });
+export interface LedgerStore {
+  state: LedgerState;
+  addBatch: (input: NewBatchInput) => string;
+  recordOperation: (input: NewOperationInput) => OperationResult;
+  recordSafetyStockChange: (params: {
+    herbName: string;
+    batchNo: string;
+    operator: string;
+    remark: string;
+    safetyStockBefore: number;
+    safetyStockAfter: number;
+    safetyStockTarget: string;
+  }) => OperationResult;
+  inventoryStore: InventoryStore;
+}
+
+export function useLedgerStore(
+  _initial?: LedgerState | (() => LedgerState)
+): LedgerStore {
+  const inventoryStore = useInventoryStore();
+  const {
+    ledgerState: state,
+    addBatch: asyncAddBatch,
+    recordOperation: asyncRecordOperation,
+    recordSafetyStockChange: asyncRecordSafetyStockChange,
+  } = inventoryStore;
+
+  const [optimisticState, setOptimisticState] = useState<LedgerState>(state);
+
+  useEffect(() => {
+    setOptimisticState(state);
+  }, [state]);
 
   const addBatch = useCallback(
     (input: NewBatchInput): string => {
-      const result = createBatch(state, input);
-      setState(result.state);
-      return result.batchId;
+      const optimisticResult = createBatch(optimisticState, input);
+      setOptimisticState(optimisticResult.state);
+      void (async () => {
+        const result = await asyncAddBatch(input);
+        if (result === null) {
+          setOptimisticState(state);
+        }
+      })();
+      return optimisticResult.batchId;
     },
-    [state]
+    [optimisticState, asyncAddBatch, state]
   );
 
   const recordOperation = useCallback(
     (input: NewOperationInput): OperationResult => {
-      const result = applyOperation(state, input);
-      if (!result.ok) {
-        return { ok: false, error: result.error };
+      const optimisticResult = applyOperation(optimisticState, input);
+      if (!optimisticResult.ok || !optimisticResult.state) {
+        return { ok: false, error: optimisticResult.error };
       }
-      setState(result.state as LedgerState);
+      setOptimisticState(optimisticResult.state);
+      void (async () => {
+        const result = await asyncRecordOperation(input);
+        if (!result.ok) {
+          setOptimisticState(state);
+        }
+      })();
       return { ok: true };
     },
-    [state]
+    [optimisticState, asyncRecordOperation, state]
   );
 
   const recordSafetyStockChange = useCallback(
@@ -684,24 +725,33 @@ export function useLedgerStore(initial?: LedgerState | (() => LedgerState)) {
         batchNo: params.batchNo,
         changeGrams: params.safetyStockAfter - params.safetyStockBefore,
         operator: params.operator || "系统",
-        remark: params.remark || `安全库存从 ${params.safetyStockBefore}g 调整为 ${params.safetyStockAfter}g`,
+        remark:
+          params.remark ||
+          `安全库存从 ${params.safetyStockBefore}g 调整为 ${params.safetyStockAfter}g`,
         safetyStockBefore: params.safetyStockBefore,
         safetyStockAfter: params.safetyStockAfter,
         safetyStockTarget: params.safetyStockTarget,
       });
-      setState((prev) => ({
+      setOptimisticState((prev) => ({
         ...prev,
         auditLogs: [auditLog, ...prev.auditLogs],
       }));
+      void (async () => {
+        await asyncRecordSafetyStockChange(params);
+      })();
       return { ok: true };
     },
-    []
+    [asyncRecordSafetyStockChange]
   );
 
-  return { state, addBatch, recordOperation, recordSafetyStockChange };
+  return {
+    state: optimisticState,
+    addBatch,
+    recordOperation,
+    recordSafetyStockChange,
+    inventoryStore,
+  };
 }
-
-export type LedgerStore = ReturnType<typeof useLedgerStore>;
 
 export function createEmptySafetyStockState(): SafetyStockState {
   return {
@@ -956,50 +1006,98 @@ export function createSeedSafetyStockState(): SafetyStockState {
   };
 }
 
+export interface SafetyStockStore {
+  state: SafetyStockState;
+  addRule: (input: NewSafetyStockRuleInput) => string;
+  updateRule: (
+    ruleId: string,
+    input: Partial<NewSafetyStockRuleInput>
+  ) => OperationResult;
+  removeRule: (ruleId: string) => OperationResult;
+  inventoryStore: InventoryStore;
+}
+
 export function useSafetyStockStore(
-  initial?: SafetyStockState | (() => SafetyStockState)
-) {
-  const [state, setState] = useState<SafetyStockState>(() => {
-    if (typeof initial === "function") {
-      return (initial as () => SafetyStockState)();
-    }
-    return initial ?? createEmptySafetyStockState();
-  });
+  _initial?: SafetyStockState | (() => SafetyStockState)
+): SafetyStockStore {
+  const inventoryStore = useInventoryStore();
+  const {
+    safetyStockState: state,
+    addSafetyStockRule: asyncAddRule,
+    updateSafetyStockRule: asyncUpdateRule,
+    removeSafetyStockRule: asyncRemoveRule,
+  } = inventoryStore;
+
+  const [optimisticState, setOptimisticState] =
+    useState<SafetyStockState>(state);
+
+  useEffect(() => {
+    setOptimisticState(state);
+  }, [state]);
 
   const addRule = useCallback(
     (input: NewSafetyStockRuleInput): string => {
-      const result = createSafetyStockRule(state, input);
-      setState(result.state);
-      return result.ruleId;
+      const optimisticResult = createSafetyStockRule(optimisticState, input);
+      setOptimisticState(optimisticResult.state);
+      void (async () => {
+        const result = await asyncAddRule(input);
+        if (result === null) {
+          setOptimisticState(state);
+        }
+      })();
+      return optimisticResult.ruleId;
     },
-    [state]
+    [optimisticState, asyncAddRule, state]
   );
 
   const updateRule = useCallback(
-    (ruleId: string, input: Partial<NewSafetyStockRuleInput>): OperationResult => {
-      const result = updateSafetyStockRule(state, ruleId, input);
-      if (!result.ok) {
-        return { ok: false, error: result.error };
+    (
+      ruleId: string,
+      input: Partial<NewSafetyStockRuleInput>
+    ): OperationResult => {
+      const optimisticResult = updateSafetyStockRule(
+        optimisticState,
+        ruleId,
+        input
+      );
+      if (!optimisticResult.ok || !optimisticResult.state) {
+        return { ok: false, error: optimisticResult.error };
       }
-      setState(result.state as SafetyStockState);
+      setOptimisticState(optimisticResult.state);
+      void (async () => {
+        const result = await asyncUpdateRule(ruleId, input);
+        if (!result.ok) {
+          setOptimisticState(state);
+        }
+      })();
       return { ok: true };
     },
-    [state]
+    [optimisticState, asyncUpdateRule, state]
   );
 
   const removeRule = useCallback(
     (ruleId: string): OperationResult => {
-      const result = deleteSafetyStockRule(state, ruleId);
-      if (!result.ok) {
-        return { ok: false, error: result.error };
+      const optimisticResult = deleteSafetyStockRule(optimisticState, ruleId);
+      if (!optimisticResult.ok || !optimisticResult.state) {
+        return { ok: false, error: optimisticResult.error };
       }
-      setState(result.state as SafetyStockState);
+      setOptimisticState(optimisticResult.state);
+      void (async () => {
+        const result = await asyncRemoveRule(ruleId);
+        if (!result.ok) {
+          setOptimisticState(state);
+        }
+      })();
       return { ok: true };
     },
-    [state]
+    [optimisticState, asyncRemoveRule, state]
   );
 
-  return { state, addRule, updateRule, removeRule };
+  return {
+    state: optimisticState,
+    addRule,
+    updateRule,
+    removeRule,
+    inventoryStore,
+  };
 }
-
-export type SafetyStockStore = ReturnType<typeof useSafetyStockStore>;
