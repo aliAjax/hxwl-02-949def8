@@ -623,4 +623,16 @@ export class RolePreferenceRepository {
     };
     return this.upsert({ ...existing, managerSortBy: sortBy });
   }
+
+  static async updateSelectedCategory(
+    role: RolePreferenceRecord["role"],
+    category: string
+  ): Promise<WriteResult<RolePreferenceRecord>> {
+    const existing = (await this.getByRole(role)) || {
+      role,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    return this.upsert({ ...existing, selectedCategory: category });
+  }
 }

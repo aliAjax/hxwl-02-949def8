@@ -67,6 +67,7 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
     addRecentSearch,
     updateWarehouseOpType,
     updateManagerSortBy,
+    updateSelectedCategory,
   } = inventoryStore;
 
   const [currentRole, setCurrentRoleState] = useState<RoleType>(
@@ -332,6 +333,7 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
           onExportSummary={handleExportSummary}
           currentRole={currentRole}
           updateManagerSortBy={updateManagerSortBy}
+          updateSelectedCategory={updateSelectedCategory}
           rolePreference={selectRolePreference(currentRole)}
         />
       )}
@@ -839,6 +841,10 @@ interface ManagerViewProps {
     role: RolePreferenceRecord["role"],
     sortBy: "stock" | "batchCount" | "name"
   ) => Promise<any>;
+  updateSelectedCategory: (
+    role: RolePreferenceRecord["role"],
+    category: string
+  ) => Promise<any>;
   rolePreference?: RolePreferenceRecord;
 }
 
@@ -855,10 +861,14 @@ function ManagerView({
   onExportSummary,
   currentRole,
   updateManagerSortBy,
+  updateSelectedCategory,
   rolePreference,
 }: ManagerViewProps) {
   const [sortBy, setSortByState] = useState<"stock" | "batchCount" | "name">(
     rolePreference?.managerSortBy || "stock"
+  );
+  const [selectedCategory, setSelectedCategoryState] = useState<string>(
+    rolePreference?.selectedCategory || "all"
   );
 
   const setSortBy = useCallback(
@@ -869,18 +879,32 @@ function ManagerView({
     [updateManagerSortBy, currentRole]
   );
 
+  const setSelectedCategory = useCallback(
+    (cat: string) => {
+      setSelectedCategoryState(cat);
+      void updateSelectedCategory(currentRole, cat);
+    },
+    [updateSelectedCategory, currentRole]
+  );
+
   const totalStockValue = useMemo(
     () => allBatches.reduce((sum, b) => sum + selectCurrentStock(ledgerState, b.id), 0),
     [allBatches, ledgerState]
   );
 
   const sortedHerbs = useMemo(() => {
-    return [...totalStockByName].sort((a, b) => {
+    const filtered = selectedCategory === "all"
+      ? totalStockByName
+      : totalStockByName.filter((item) => {
+          const firstBatch = allBatches.find((b) => b.name === item.name);
+          return firstBatch?.category === selectedCategory;
+        });
+    return [...filtered].sort((a, b) => {
       if (sortBy === "stock") return b.totalStock - a.totalStock;
       if (sortBy === "batchCount") return b.batchCount - a.batchCount;
       return a.name.localeCompare(b.name);
     });
-  }, [totalStockByName, sortBy]);
+  }, [totalStockByName, sortBy, selectedCategory, allBatches]);
 
   const topCategory = useMemo(() => {
     let max = { name: "", value: 0 };
@@ -1023,6 +1047,24 @@ function ManagerView({
                 按名称
               </button>
             </div>
+          </div>
+          <div className="manager-category-filters">
+            <span className="filter-label">分类：</span>
+            <button
+              className={selectedCategory === "all" ? "filter-active" : ""}
+              onClick={() => setSelectedCategory("all")}
+            >
+              全部
+            </button>
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                className={selectedCategory === cat ? "filter-active" : ""}
+                onClick={() => setSelectedCategory(cat)}
+              >
+                {cat}
+              </button>
+            ))}
           </div>
           <div className="herb-ranking-list">
             {sortedHerbs.map((item, index) => (

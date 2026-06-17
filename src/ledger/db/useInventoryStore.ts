@@ -369,6 +369,27 @@ export function useInventoryStore() {
     [clearWriteError]
   );
 
+  const updateSelectedCategory = useCallback(
+    async (
+      role: RolePreferenceRecord["role"],
+      category: string
+    ): Promise<WriteResult<RolePreferenceRecord>> => {
+      clearWriteError();
+      const result = await RolePreferenceRepository.updateSelectedCategory(
+        role,
+        category
+      );
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "分类偏好保存失败",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
   const selectRolePreference = useCallback(
     (role: RolePreferenceRecord["role"]): RolePreferenceRecord | undefined => {
       return rolePreferences.find((p) => p.role === role);
@@ -435,6 +456,7 @@ export function useInventoryStore() {
     addRecentSearch,
     updateWarehouseOpType,
     updateManagerSortBy,
+    updateSelectedCategory,
     selectRolePreference,
     selectCurrentRoleOrDefault,
     resetAll,
