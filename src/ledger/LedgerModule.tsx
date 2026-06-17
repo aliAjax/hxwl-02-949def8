@@ -10,7 +10,6 @@ import {
 } from "./types";
 import {
   checkBatchNoExists,
-  createSeedState,
   daysUntilExpiry,
   isLowStock,
   selectBatches,
@@ -18,8 +17,8 @@ import {
   selectExpiryStatus,
   selectPendingSyncCount,
   selectRecentOperations,
-  useLedgerStore,
 } from "./store";
+import type { LedgerStore } from "./store";
 
 const emptyBatchForm = {
   name: "",
@@ -77,8 +76,12 @@ function expiryBadgeText(expiry: string): { text: string; className: string } {
   return { text: `剩余 ${days} 天`, className: "expiry-ok" };
 }
 
-function LedgerModule() {
-  const { state, addBatch, recordOperation } = useLedgerStore(createSeedState);
+interface LedgerModuleProps {
+  store: LedgerStore;
+}
+
+function LedgerModule({ store }: LedgerModuleProps) {
+  const { state, addBatch, recordOperation } = store;
   const [showForm, setShowForm] = useState(false);
   const [batchForm, setBatchForm] = useState({ ...emptyBatchForm });
   const [batchErrors, setBatchErrors] = useState<Record<string, string>>({});
@@ -287,14 +290,8 @@ function LedgerModule() {
 
 interface BatchLedgerCardProps {
   batchId: string;
-  stateRef: ReturnType<typeof useLedgerStore>["state"];
-  onRecord: (input: {
-    batchId: string;
-    type: OperationType;
-    quantity: number;
-    operator: string;
-    remark: string;
-  }) => { ok: boolean; error?: string };
+  stateRef: LedgerStore["state"];
+  onRecord: LedgerStore["recordOperation"];
 }
 
 function BatchLedgerCard({ batchId, stateRef, onRecord }: BatchLedgerCardProps) {

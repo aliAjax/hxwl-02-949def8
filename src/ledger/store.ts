@@ -527,3 +527,5 @@ export function useLedgerStore(initial?: LedgerState | (() => LedgerState)) {
 
   return { state, addBatch, recordOperation };
 }
+
+export type LedgerStore = ReturnType<typeof useLedgerStore>;

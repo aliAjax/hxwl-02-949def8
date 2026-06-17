@@ -7,14 +7,13 @@ import {
 } from "./types";
 import {
   countBatchesByAlertLevel,
-  createSeedState,
   daysUntilExpiry,
   selectAlertLevel,
   selectAllBatches,
   selectBatchesByAlertLevel,
   selectCurrentStock,
-  useLedgerStore,
 } from "./store";
+import type { LedgerStore } from "./store";
 
 const alertLevelLabels: Record<AlertLevel, string> = {
   normal: "正常",
@@ -115,8 +114,12 @@ function AlertBatchCard({ batch, currentStock, daysLeft, level }: AlertBatchCard
   );
 }
 
-function ExpiryAlertModule() {
-  const { state } = useLedgerStore(createSeedState);
+interface ExpiryAlertModuleProps {
+  store: LedgerStore;
+}
+
+function ExpiryAlertModule({ store }: ExpiryAlertModuleProps) {
+  const { state } = store;
   const [selectedLevel, setSelectedLevel] = useState<AlertLevel | "all">("all");
   const [query, setQuery] = useState("");
 

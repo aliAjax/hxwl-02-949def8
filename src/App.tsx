@@ -6,7 +6,8 @@ import {
   createSeedState,
   countBatchesByAlertLevel,
   selectLowStockBatches,
-  selectAllBatches,
+  selectNearExpiryCount,
+  useLedgerStore,
 } from "./ledger/store";
 
 interface InventoryRecord {
@@ -168,15 +169,13 @@ function MetricCard({ label, value, index }: { label: string; value: string; ind
 }
 
 function App() {
-  const seedState = useMemo(() => createSeedState(), []);
+  const ledgerStore = useLedgerStore(createSeedState);
+  const { state: ledgerState } = ledgerStore;
 
-  const alertCounts = useMemo(() => countBatchesByAlertLevel(seedState), [seedState]);
-  const lowStockBatches = useMemo(() => selectLowStockBatches(seedState), [seedState]);
-  const allBatches = useMemo(() => selectAllBatches(seedState), [seedState]);
-
-  const nearExpiryCount = alertCounts.warning60 + alertCounts.warning30 + alertCounts.expired;
+  const alertCounts = useMemo(() => countBatchesByAlertLevel(ledgerState), [ledgerState]);
+  const lowStockBatches = useMemo(() => selectLowStockBatches(ledgerState), [ledgerState]);
+  const nearExpiryCount = useMemo(() => selectNearExpiryCount(ledgerState), [ledgerState]);
   const lowStockCount = lowStockBatches.length;
-  const totalBatchCount = allBatches.length;
 
   const metricValues = [
     String(nearExpiryCount),
@@ -310,9 +309,9 @@ function App() {
       </nav>
 
       {tab === "ledger" ? (
-        <LedgerModule />
+        <LedgerModule store={ledgerStore} />
       ) : tab === "alert" ? (
-        <ExpiryAlertModule />
+        <ExpiryAlertModule store={ledgerStore} />
       ) : (
         <>
       <section className="metrics-grid">
