@@ -113,6 +113,8 @@ const emptyForm: Record<string, string> = {
   remark: "",
 };
 
+const optionalEntryFields = new Set<keyof typeof emptyForm>(["operator", "remark"]);
+
 const statusColors = ["status-ok", "status-watch", "status-danger"];
 
 function getStockStatus(record: InventoryRecord): string {
@@ -249,6 +251,7 @@ function App() {
     const nextErrors: Record<string, string> = {};
 
     project.fields.forEach((field) => {
+      if (optionalEntryFields.has(field.key)) return;
       const value = formData[field.key];
       if (!value || !value.trim()) {
         nextErrors[field.key] = `${field.label}不能为空`;
@@ -449,7 +452,9 @@ function App() {
               <label key={field.key}>
                 <span>
                   {field.label}
-                  <span className="required-mark">*</span>
+                  {!optionalEntryFields.has(field.key) && (
+                    <span className="required-mark">*</span>
+                  )}
                 </span>
                 <input
                   type={field.key === "expiry" ? "date" : field.key === "stockGrams" ? "number" : "text"}
