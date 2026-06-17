@@ -33,6 +33,8 @@ export interface RolePreferenceRecord {
   selectedCategory?: string;
   dashboardLayout?: string;
   recentSearches?: string[];
+  warehouseOpType?: OperationType;
+  managerSortBy?: "stock" | "batchCount" | "name";
   createdAt: string;
   updatedAt: string;
 }

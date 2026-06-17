@@ -599,4 +599,28 @@ export class RolePreferenceRepository {
       .slice(0, maxItems);
     return this.upsert({ ...existing, recentSearches: searches });
   }
+
+  static async updateWarehouseOpType(
+    role: RolePreferenceRecord["role"],
+    opType: "inbound" | "outbound" | "loss"
+  ): Promise<WriteResult<RolePreferenceRecord>> {
+    const existing = (await this.getByRole(role)) || {
+      role,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    return this.upsert({ ...existing, warehouseOpType: opType });
+  }
+
+  static async updateManagerSortBy(
+    role: RolePreferenceRecord["role"],
+    sortBy: "stock" | "batchCount" | "name"
+  ): Promise<WriteResult<RolePreferenceRecord>> {
+    const existing = (await this.getByRole(role)) || {
+      role,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    return this.upsert({ ...existing, managerSortBy: sortBy });
+  }
 }

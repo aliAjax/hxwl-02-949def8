@@ -101,6 +101,8 @@ export interface RolePreferenceRecord {
   selectedCategory?: string;
   dashboardLayout?: string;
   recentSearches?: string[];
+  warehouseOpType?: "inbound" | "outbound" | "loss";
+  managerSortBy?: "stock" | "batchCount" | "name";
   createdAt: string;
   updatedAt: string;
 }
@@ -247,6 +249,8 @@ export function fillRolePreferenceDefaults(
     defaultTab: raw.defaultTab ?? false,
     recentSearches: raw.recentSearches ?? [],
     preferredFilters: raw.preferredFilters ?? [],
+    warehouseOpType: raw.warehouseOpType ?? "inbound",
+    managerSortBy: raw.managerSortBy ?? "stock",
   } as RolePreferenceRecord;
 }
 

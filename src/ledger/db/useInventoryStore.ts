@@ -327,6 +327,48 @@ export function useInventoryStore() {
     [clearWriteError]
   );
 
+  const updateWarehouseOpType = useCallback(
+    async (
+      role: RolePreferenceRecord["role"],
+      opType: "inbound" | "outbound" | "loss"
+    ): Promise<WriteResult<RolePreferenceRecord>> => {
+      clearWriteError();
+      const result = await RolePreferenceRepository.updateWarehouseOpType(
+        role,
+        opType
+      );
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "操作类型偏好保存失败",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
+  const updateManagerSortBy = useCallback(
+    async (
+      role: RolePreferenceRecord["role"],
+      sortBy: "stock" | "batchCount" | "name"
+    ): Promise<WriteResult<RolePreferenceRecord>> => {
+      clearWriteError();
+      const result = await RolePreferenceRepository.updateManagerSortBy(
+        role,
+        sortBy
+      );
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "排序偏好保存失败",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
   const selectRolePreference = useCallback(
     (role: RolePreferenceRecord["role"]): RolePreferenceRecord | undefined => {
       return rolePreferences.find((p) => p.role === role);
@@ -391,6 +433,8 @@ export function useInventoryStore() {
     exportSnapshot,
     updateRolePreference,
     addRecentSearch,
+    updateWarehouseOpType,
+    updateManagerSortBy,
     selectRolePreference,
     selectCurrentRoleOrDefault,
     resetAll,

@@ -65,6 +65,8 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
     selectRolePreference,
     selectCurrentRoleOrDefault,
     addRecentSearch,
+    updateWarehouseOpType,
+    updateManagerSortBy,
   } = inventoryStore;
 
   const [currentRole, setCurrentRoleState] = useState<RoleType>(
@@ -310,6 +312,9 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
           onQuickInbound={handleQuickInbound}
           onQuickOutbound={handleQuickOutbound}
           onQuickLoss={handleQuickLoss}
+          currentRole={currentRole}
+          updateWarehouseOpType={updateWarehouseOpType}
+          rolePreference={selectRolePreference(currentRole)}
         />
       )}
 
@@ -325,6 +330,9 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
           weeklyInbound={weeklyInbound}
           weeklyOutbound={weeklyOutbound}
           onExportSummary={handleExportSummary}
+          currentRole={currentRole}
+          updateManagerSortBy={updateManagerSortBy}
+          rolePreference={selectRolePreference(currentRole)}
         />
       )}
     </section>
@@ -604,6 +612,12 @@ interface WarehouseViewProps {
   onQuickInbound: (batchId: string) => void;
   onQuickOutbound: (batchId: string) => void;
   onQuickLoss: (batchId: string) => void;
+  currentRole: RoleType;
+  updateWarehouseOpType: (
+    role: RolePreferenceRecord["role"],
+    opType: "inbound" | "outbound" | "loss"
+  ) => Promise<any>;
+  rolePreference?: RolePreferenceRecord;
 }
 
 function WarehouseView({
@@ -615,8 +629,21 @@ function WarehouseView({
   onQuickInbound,
   onQuickOutbound,
   onQuickLoss,
+  currentRole,
+  updateWarehouseOpType,
+  rolePreference,
 }: WarehouseViewProps) {
-  const [opType, setOpType] = useState<OperationType>("inbound");
+  const [opType, setOpTypeState] = useState<OperationType>(
+    rolePreference?.warehouseOpType || "inbound"
+  );
+
+  const setOpType = useCallback(
+    (type: OperationType) => {
+      setOpTypeState(type);
+      void updateWarehouseOpType(currentRole, type);
+    },
+    [updateWarehouseOpType, currentRole]
+  );
 
   const recentOperations = useMemo(() => {
     return allOperations
@@ -807,6 +834,12 @@ interface ManagerViewProps {
   weeklyInbound: number;
   weeklyOutbound: number;
   onExportSummary: () => void;
+  currentRole: RoleType;
+  updateManagerSortBy: (
+    role: RolePreferenceRecord["role"],
+    sortBy: "stock" | "batchCount" | "name"
+  ) => Promise<any>;
+  rolePreference?: RolePreferenceRecord;
 }
 
 function ManagerView({
@@ -820,8 +853,21 @@ function ManagerView({
   weeklyInbound,
   weeklyOutbound,
   onExportSummary,
+  currentRole,
+  updateManagerSortBy,
+  rolePreference,
 }: ManagerViewProps) {
-  const [sortBy, setSortBy] = useState<"stock" | "batchCount" | "name">("stock");
+  const [sortBy, setSortByState] = useState<"stock" | "batchCount" | "name">(
+    rolePreference?.managerSortBy || "stock"
+  );
+
+  const setSortBy = useCallback(
+    (sort: "stock" | "batchCount" | "name") => {
+      setSortByState(sort);
+      void updateManagerSortBy(currentRole, sort);
+    },
+    [updateManagerSortBy, currentRole]
+  );
 
   const totalStockValue = useMemo(
     () => allBatches.reduce((sum, b) => sum + selectCurrentStock(ledgerState, b.id), 0),
