@@ -138,6 +138,19 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
     }
   };
 
+  const handleQuickLoss = (batchId: string) => {
+    const result = recordOperation({
+      batchId,
+      type: "loss",
+      quantity: 50,
+      operator: ROLE_CONFIG[currentRole].label,
+      remark: "快捷损耗登记",
+    });
+    if (!result.ok) {
+      alert(result.error);
+    }
+  };
+
   const handleExportSummary = () => {
     const headers = [
       "饮片名称",
@@ -248,6 +261,7 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
           weeklyOutbound={weeklyOutbound}
           onQuickInbound={handleQuickInbound}
           onQuickOutbound={handleQuickOutbound}
+          onQuickLoss={handleQuickLoss}
         />
       )}
 
@@ -287,28 +301,24 @@ function PharmacistView({
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [herbQuery, setHerbQuery] = useState("");
 
-  const expirySortedBatches = useMemo(() => {
-    return [...allBatches].sort((a, b) => {
+  const nearExpiryBatches = useMemo(() => {
+    return [...alertGrouped.expired, ...alertGrouped.warning30, ...alertGrouped.warning60].sort((a, b) => {
       const daysA = daysUntilExpiry(a.expiry);
       const daysB = daysUntilExpiry(b.expiry);
       return daysA - daysB;
     });
-  }, [allBatches]);
-
-  const nearExpiryBatches = useMemo(() => {
-    return [...alertGrouped.expired, ...alertGrouped.warning30, ...alertGrouped.warning60];
   }, [alertGrouped]);
 
   const filteredHerbs = useMemo(() => {
     const q = herbQuery.trim().toLowerCase();
-    if (!q) return expirySortedBatches;
-    return expirySortedBatches.filter(
+    if (!q) return nearExpiryBatches;
+    return nearExpiryBatches.filter(
       (b) =>
         b.name.toLowerCase().includes(q) ||
         b.spec.toLowerCase().includes(q) ||
         b.batchNo.toLowerCase().includes(q)
     );
-  }, [expirySortedBatches, herbQuery]);
+  }, [nearExpiryBatches, herbQuery]);
 
   const selectedBatch = selectedBatchId ? ledgerState.batches[selectedBatchId] : null;
   const selectedBatchStock = selectedBatch ? selectCurrentStock(ledgerState, selectedBatchId!) : 0;
@@ -496,6 +506,7 @@ interface WarehouseViewProps {
   weeklyOutbound: number;
   onQuickInbound: (batchId: string) => void;
   onQuickOutbound: (batchId: string) => void;
+  onQuickLoss: (batchId: string) => void;
 }
 
 function WarehouseView({
@@ -506,6 +517,7 @@ function WarehouseView({
   weeklyOutbound,
   onQuickInbound,
   onQuickOutbound,
+  onQuickLoss,
 }: WarehouseViewProps) {
   const [opType, setOpType] = useState<OperationType>("inbound");
 
@@ -628,9 +640,9 @@ function WarehouseView({
                           ) : (
                             <button
                               className="role-action-btn role-action-danger"
-                              onClick={() => onQuickOutbound(batch.id)}
+                              onClick={() => onQuickLoss(batch.id)}
                             >
-                              损耗登记
+                              -50g 损耗
                             </button>
                           )}
                         </div>
