@@ -1412,3 +1412,798 @@ select {
     max-width: none;
   }
 }
+
+.role-workspace.module {
+  margin-bottom: 20px;
+}
+
+.role-description {
+  color: #64748b;
+  font-size: 14px;
+  margin: 0;
+}
+
+.role-export-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.secondary-action {
+  background: #ffffff;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.role-switcher {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.role-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 44px;
+}
+
+.role-tab:hover {
+  border-color: color-mix(in srgb, var(--primary) 28%, #dbe3ef);
+  background: color-mix(in srgb, var(--primary) 6%, #ffffff);
+}
+
+.role-tab.role-tab-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.role-icon {
+  font-size: 18px;
+}
+
+.role-label {
+  font-weight: 600;
+}
+
+.role-view {
+  display: grid;
+  gap: 20px;
+}
+
+.pharmacist-metrics,
+.warehouse-metrics,
+.manager-metrics {
+  display: grid;
+  gap: 12px;
+}
+
+.pharmacist-metrics,
+.warehouse-metrics {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.manager-metrics {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.role-metric-card {
+  position: relative;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 90px;
+}
+
+.role-metric-card span {
+  color: #64748b;
+  font-size: 12px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.role-metric-card strong {
+  display: block;
+  font-size: 24px;
+  color: var(--primary);
+}
+
+.role-metric-card i {
+  font-style: normal;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+.role-metric-danger strong {
+  color: #e11d48;
+}
+
+.role-metric-warning strong {
+  color: var(--accent);
+}
+
+.role-metric-success strong {
+  color: var(--primary);
+}
+
+.role-workspace-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 20px;
+}
+
+.role-panel {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.role-panel-narrow {
+  max-height: 700px;
+  overflow-y: auto;
+}
+
+.role-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.role-panel-heading h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--primary);
+}
+
+.role-panel-count {
+  font-size: 12px;
+  color: #64748b;
+  background: color-mix(in srgb, var(--primary) 8%, #ffffff);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.role-panel-subtitle {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.role-search {
+  margin-bottom: 12px;
+}
+
+.role-search input {
+  width: 100%;
+}
+
+.role-batch-list,
+.role-lowstock-list {
+  display: grid;
+  gap: 10px;
+}
+
+.role-batch-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfdff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.role-batch-item:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.role-batch-item.selected {
+  border-color: var(--primary);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--primary) 4%, #fbfdff);
+}
+
+.role-batch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.role-batch-name {
+  font-weight: 600;
+  color: #172033;
+  margin-bottom: 4px;
+}
+
+.role-batch-stock {
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.role-batch-stock strong {
+  color: var(--primary);
+}
+
+.role-batch-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.role-action-btn {
+  flex: 1;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 600;
+}
+
+.role-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.role-action-primary {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+}
+
+.role-action-success {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+}
+
+.role-action-danger {
+  background: #e11d48;
+  color: #ffffff;
+  border-color: #e11d48;
+}
+
+.role-empty {
+  text-align: center;
+  padding: 32px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.role-empty-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+  opacity: 0.6;
+}
+
+.role-empty h4 {
+  margin: 0 0 6px;
+  color: #172033;
+}
+
+.role-empty p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.herb-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.herb-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.herb-detail-header h4 {
+  margin: 6px 0 0;
+  font-size: 20px;
+  color: #172033;
+}
+
+.herb-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.meta-item {
+  display: grid;
+  gap: 4px;
+}
+
+.meta-item span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.meta-item strong {
+  font-size: 15px;
+  color: #172033;
+}
+
+.herb-detail-stock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stock-display-large {
+  display: grid;
+  gap: 4px;
+}
+
+.stock-display-large span {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.stock-display-large strong {
+  font-size: 36px;
+  color: var(--primary);
+}
+
+.stock-display-large i {
+  font-style: normal;
+  font-size: 16px;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.herb-detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.herb-detail-operations h5 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.warehouse-op-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 4px;
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+
+.warehouse-op-toggle button {
+  flex: 1;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #64748b;
+  transition: all 0.15s ease;
+}
+
+.warehouse-op-toggle button.op-toggle-active {
+  background: #ffffff;
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.lowstock-herb-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfdff;
+}
+
+.lowstock-herb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.lowstock-herb-head h4 {
+  margin: 0;
+  font-size: 16px;
+  color: #172033;
+}
+
+.lowstock-category {
+  font-size: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, #ffffff);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.lowstock-herb-stock {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stock-mini {
+  display: grid;
+  gap: 2px;
+}
+
+.stock-mini span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.stock-mini strong {
+  font-size: 16px;
+  color: #172033;
+}
+
+.stock-mini i {
+  font-style: normal;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.stock-threshold strong {
+  color: var(--accent);
+}
+
+.stock-shortage strong {
+  color: #e11d48;
+}
+
+.lowstock-herb-batches {
+  display: grid;
+  gap: 8px;
+}
+
+.lowstock-batch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.lowstock-batch-row > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.batch-spec {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.batch-stock-small {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.op-list-large {
+  gap: 8px;
+}
+
+.op-list-large .op-item {
+  grid-template-columns: 56px auto auto 1fr;
+  grid-template-areas:
+    "type batch qty balance"
+    "type batch time operator";
+}
+
+.op-batch-info {
+  grid-area: batch;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.op-herb-name {
+  font-weight: 600;
+  color: #172033;
+  font-size: 13px;
+}
+
+.warehouse-operations {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.category-chart {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.category-bar-row {
+  display: grid;
+  gap: 6px;
+}
+
+.category-bar-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.category-bar-label span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #172033;
+}
+
+.category-bar-value {
+  color: var(--primary) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+}
+
+.category-bar-track {
+  height: 10px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.category-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.category-bar-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.manager-summary {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.manager-summary h4 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--primary);
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.summary-item:last-of-type {
+  border-bottom: none;
+  margin-bottom: 12px;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.summary-value {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.summary-good {
+  color: var(--primary);
+}
+
+.summary-warn {
+  color: var(--accent);
+}
+
+.summary-danger {
+  color: #e11d48;
+}
+
+.manager-export-btn {
+  width: 100%;
+}
+
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.sort-controls button {
+  min-height: 30px;
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sort-controls button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.sort-controls button.sort-active {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+}
+
+.herb-ranking-list {
+  display: grid;
+  gap: 10px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.herb-ranking-item {
+  display: grid;
+  grid-template-columns: 48px 1fr auto 2fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.ranking-index {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 800;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.ranking-info h4 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  color: #172033;
+}
+
+.ranking-info span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.ranking-stock {
+  text-align: right;
+}
+
+.ranking-stock strong {
+  font-size: 20px;
+  color: var(--primary);
+}
+
+.ranking-stock i {
+  font-style: normal;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.ranking-bar {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ranking-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+@media (max-width: 860px) {
+  .role-switcher {
+    flex-wrap: wrap;
+  }
+
+  .pharmacist-metrics,
+  .warehouse-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .manager-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .role-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .role-panel-narrow {
+    max-height: none;
+  }
+
+  .herb-detail-meta {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .herb-detail-stock {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .herb-ranking-item {
+    grid-template-columns: 40px 1fr auto;
+    grid-template-rows: auto auto;
+  }
+
+  .ranking-bar {
+    grid-column: 1 / -1;
+  }
+
+  .op-list-large .op-item {
+    grid-template-columns: 56px 1fr;
+    grid-template-areas:
+      "type batch"
+      "type qty"
+      "type balance"
+      "type time"
+      "type operator";
+  }
+
+  .lowstock-herb-stock {
+    grid-template-columns: 1fr;
+  }
+
+  .lowstock-batch-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

@@ -4,6 +4,7 @@ import LedgerModule from "./ledger/LedgerModule";
 import ExpiryAlertModule from "./ledger/ExpiryAlertModule";
 import SafetyStockModule from "./ledger/SafetyStockModule";
 import LowStockModule from "./ledger/LowStockModule";
+import RoleWorkspaceModule from "./ledger/RoleWorkspaceModule";
 import {
   createSeedState,
   createSeedSafetyStockState,
@@ -200,7 +201,7 @@ function App() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [records, setRecords] = useState<InventoryRecord[]>([...project.initialRecords]);
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock">("entry");
+  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock" | "workspace">("workspace");
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -301,6 +302,12 @@ function App() {
 
       <nav className="tab-bar">
         <button
+          className={tab === "workspace" ? "tab tab-active" : "tab"}
+          onClick={() => setTab("workspace")}
+        >
+          角色化工作台
+        </button>
+        <button
           className={tab === "entry" ? "tab tab-active" : "tab"}
           onClick={() => setTab("entry")}
         >
@@ -332,7 +339,12 @@ function App() {
         </button>
       </nav>
 
-      {tab === "ledger" ? (
+      {tab === "workspace" ? (
+        <RoleWorkspaceModule
+          ledgerStore={ledgerStore}
+          safetyStockStore={safetyStockStore}
+        />
+      ) : tab === "ledger" ? (
         <LedgerModule store={ledgerStore} safetyStockState={safetyStockState} />
       ) : tab === "alert" ? (
         <ExpiryAlertModule store={ledgerStore} />
