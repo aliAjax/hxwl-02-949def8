@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertLevel,
   AUDIT_LOG_LABELS,
@@ -671,8 +671,10 @@ export function useLedgerStore(
   } = inventoryStore;
 
   const [optimisticState, setOptimisticState] = useState<LedgerState>(state);
+  const lastDbStateRef = useRef<LedgerState>(state);
 
   useEffect(() => {
+    lastDbStateRef.current = state;
     setOptimisticState(state);
   }, [state]);
 
@@ -683,12 +685,12 @@ export function useLedgerStore(
       void (async () => {
         const result = await asyncAddBatch(input);
         if (result === null) {
-          setOptimisticState(state);
+          setOptimisticState(lastDbStateRef.current);
         }
       })();
       return optimisticResult.batchId;
     },
-    [optimisticState, asyncAddBatch, state]
+    [optimisticState, asyncAddBatch]
   );
 
   const recordOperation = useCallback(
@@ -701,12 +703,12 @@ export function useLedgerStore(
       void (async () => {
         const result = await asyncRecordOperation(input);
         if (!result.ok) {
-          setOptimisticState(state);
+          setOptimisticState(lastDbStateRef.current);
         }
       })();
       return { ok: true };
     },
-    [optimisticState, asyncRecordOperation, state]
+    [optimisticState, asyncRecordOperation]
   );
 
   const recordSafetyStockChange = useCallback(
@@ -1030,8 +1032,10 @@ export function useSafetyStockStore(
 
   const [optimisticState, setOptimisticState] =
     useState<SafetyStockState>(state);
+  const lastDbStateRef = useRef<SafetyStockState>(state);
 
   useEffect(() => {
+    lastDbStateRef.current = state;
     setOptimisticState(state);
   }, [state]);
 
@@ -1042,12 +1046,12 @@ export function useSafetyStockStore(
       void (async () => {
         const result = await asyncAddRule(input);
         if (result === null) {
-          setOptimisticState(state);
+          setOptimisticState(lastDbStateRef.current);
         }
       })();
       return optimisticResult.ruleId;
     },
-    [optimisticState, asyncAddRule, state]
+    [optimisticState, asyncAddRule]
   );
 
   const updateRule = useCallback(
@@ -1067,12 +1071,12 @@ export function useSafetyStockStore(
       void (async () => {
         const result = await asyncUpdateRule(ruleId, input);
         if (!result.ok) {
-          setOptimisticState(state);
+          setOptimisticState(lastDbStateRef.current);
         }
       })();
       return { ok: true };
     },
-    [optimisticState, asyncUpdateRule, state]
+    [optimisticState, asyncUpdateRule]
   );
 
   const removeRule = useCallback(
@@ -1085,12 +1089,12 @@ export function useSafetyStockStore(
       void (async () => {
         const result = await asyncRemoveRule(ruleId);
         if (!result.ok) {
-          setOptimisticState(state);
+          setOptimisticState(lastDbStateRef.current);
         }
       })();
       return { ok: true };
     },
-    [optimisticState, asyncRemoveRule, state]
+    [optimisticState, asyncRemoveRule]
   );
 
   return {

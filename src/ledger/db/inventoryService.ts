@@ -43,6 +43,7 @@ export class InventoryService {
 
   private static async initializeWithSeed(): Promise<void> {
     const seed = buildSeedData();
+    const now = nowIso();
     await inventoryDB.withTransaction(
       [
         STORES.HERBS,
@@ -51,6 +52,7 @@ export class InventoryService {
         STORES.AUDIT_LOGS,
         STORES.SAFETY_STOCK_RULES,
         STORES.ROLE_PREFERENCES,
+        STORES.META,
       ],
       "readwrite",
       (stores) => {
@@ -72,14 +74,41 @@ export class InventoryService {
         for (const pref of seed.rolePreferences) {
           stores[STORES.ROLE_PREFERENCES].put(pref);
         }
+        stores[STORES.META].put({
+          key: this.SEED_FLAG,
+          value: true,
+          updatedAt: now,
+        });
       }
     );
-    await inventoryDB.setMeta(this.SEED_FLAG, true);
   }
 
   static async resetAllData(): Promise<void> {
-    await inventoryDB.clearAll();
-    await inventoryDB.setMeta(this.SEED_FLAG, false);
+    await inventoryDB.withTransaction(
+      [
+        STORES.HERBS,
+        STORES.BATCHES,
+        STORES.OPERATIONS,
+        STORES.AUDIT_LOGS,
+        STORES.SAFETY_STOCK_RULES,
+        STORES.ROLE_PREFERENCES,
+        STORES.META,
+      ],
+      "readwrite",
+      (stores) => {
+        stores[STORES.HERBS].clear();
+        stores[STORES.BATCHES].clear();
+        stores[STORES.OPERATIONS].clear();
+        stores[STORES.AUDIT_LOGS].clear();
+        stores[STORES.SAFETY_STOCK_RULES].clear();
+        stores[STORES.ROLE_PREFERENCES].clear();
+        stores[STORES.META].put({
+          key: this.SEED_FLAG,
+          value: false,
+          updatedAt: nowIso(),
+        });
+      }
+    );
   }
 
   static async resetAndReseed(): Promise<void> {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CATEGORIES,
   NEAR_EXPIRY_DAYS,
@@ -20,6 +20,7 @@ import {
   type LowStockHerbItem,
 } from "./store";
 import type { LedgerStore, SafetyStockStore } from "./store";
+import type { RolePreferenceRecord } from "./db/repositories";
 
 type RoleType = "pharmacist" | "warehouse" | "manager";
 
@@ -57,9 +58,54 @@ interface RoleWorkspaceModuleProps {
 }
 
 function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceModuleProps) {
-  const { state: ledgerState, recordOperation } = ledgerStore;
+  const { state: ledgerState, recordOperation, inventoryStore } = ledgerStore;
   const { state: safetyStockState } = safetyStockStore;
-  const [currentRole, setCurrentRole] = useState<RoleType>("pharmacist");
+  const {
+    updateRolePreference,
+    selectRolePreference,
+    selectCurrentRoleOrDefault,
+    addRecentSearch,
+    rolePreferences,
+  } = inventoryStore;
+
+  const [currentRole, setCurrentRoleState] = useState<RoleType>(
+    selectCurrentRoleOrDefault()
+  );
+  const [roleInitializing, setRoleInitializing] = useState(true);
+
+  useEffect(() => {
+    const defaultRole = selectCurrentRoleOrDefault();
+    setCurrentRoleState(defaultRole);
+    setRoleInitializing(false);
+  }, [selectCurrentRoleOrDefault]);
+
+  const setCurrentRole = useCallback(
+    (role: RoleType) => {
+      setCurrentRoleState(role);
+      void (async () => {
+        const existing = selectRolePreference(role);
+        await updateRolePreference({
+          role,
+          displayName: existing?.displayName || ROLE_CONFIG[role].label,
+          defaultTab: true,
+        });
+        const allRoles: RolePreferenceRecord["role"][] = [
+          "pharmacist",
+          "warehouse",
+          "manager",
+        ];
+        for (const r of allRoles) {
+          if (r !== role) {
+            const other = selectRolePreference(r);
+            if (other?.defaultTab) {
+              await updateRolePreference({ role: r, defaultTab: false });
+            }
+          }
+        }
+      })();
+    },
+    [updateRolePreference, selectRolePreference]
+  );
 
   const allBatches = useMemo(() => selectAllBatches(ledgerState), [ledgerState]);
   const allOperations = useMemo(() => selectAllOperations(ledgerState), [ledgerState]);
@@ -249,6 +295,9 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
           alertGrouped={alertGrouped}
           nearExpiryCount={nearExpiryCount}
           onQuickOutbound={handleQuickOutbound}
+          currentRole={currentRole}
+          addRecentSearch={addRecentSearch}
+          rolePreference={selectRolePreference(currentRole)}
         />
       )}
 
@@ -289,6 +338,13 @@ interface PharmacistViewProps {
   alertGrouped: ReturnType<typeof selectBatchesByAlertLevel>;
   nearExpiryCount: number;
   onQuickOutbound: (batchId: string) => void;
+  currentRole: RoleType;
+  addRecentSearch: (
+    role: RolePreferenceRecord["role"],
+    search: string,
+    maxItems?: number
+  ) => Promise<any>;
+  rolePreference?: RolePreferenceRecord;
 }
 
 function PharmacistView({
@@ -297,9 +353,36 @@ function PharmacistView({
   alertGrouped,
   nearExpiryCount,
   onQuickOutbound,
+  currentRole,
+  addRecentSearch,
+  rolePreference,
 }: PharmacistViewProps) {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [herbQuery, setHerbQuery] = useState("");
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setHerbQuery(value);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      debounceTimerRef.current = setTimeout(() => {
+        void addRecentSearch(currentRole, trimmed, 10);
+      }, 800);
+    },
+    [addRecentSearch, currentRole]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const nearExpiryBatches = useMemo(() => {
     return [...alertGrouped.expired, ...alertGrouped.warning30, ...alertGrouped.warning60].sort((a, b) => {
@@ -367,9 +450,24 @@ function PharmacistView({
               type="text"
               placeholder="搜索饮片名称/规格/批号"
               value={herbQuery}
-              onChange={(e) => setHerbQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
+          {rolePreference?.recentSearches &&
+            rolePreference.recentSearches.length > 0 && (
+              <div className="recent-searches">
+                <span className="recent-label">最近搜索：</span>
+                {rolePreference.recentSearches.map((s, i) => (
+                  <button
+                    key={`${s}-${i}`}
+                    className="recent-chip"
+                    onClick={() => handleSearchChange(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           <div className="role-batch-list">
             {nearExpiryBatches.length === 0 ? (
               <div className="role-empty">

@@ -301,6 +301,64 @@ export function useInventoryStore() {
     [clearWriteError]
   );
 
+  const addRecentSearch = useCallback(
+    async (
+      role: RolePreferenceRecord["role"],
+      search: string,
+      maxItems = 10
+    ): Promise<WriteResult<RolePreferenceRecord>> => {
+      if (!search || !search.trim()) {
+        return { ok: false, error: "搜索内容不能为空", errorType: "constraint" };
+      }
+      clearWriteError();
+      const result = await RolePreferenceRepository.addRecentSearch(
+        role,
+        search.trim(),
+        maxItems
+      );
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "搜索历史保存失败",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
+  const selectRolePreference = useCallback(
+    (role: RolePreferenceRecord["role"]): RolePreferenceRecord | undefined => {
+      return rolePreferences.find((p) => p.role === role);
+    },
+    [rolePreferences]
+  );
+
+  const selectCurrentRoleOrDefault = useCallback(
+    (): RolePreferenceRecord["role"] => {
+      const manager = rolePreferences.find(
+        (p) => p.role === "manager"
+      );
+      if (manager?.defaultTab) {
+        return "manager";
+      }
+      const pharmacist = rolePreferences.find(
+        (p) => p.role === "pharmacist"
+      );
+      if (pharmacist?.defaultTab) {
+        return "pharmacist";
+      }
+      const warehouse = rolePreferences.find(
+        (p) => p.role === "warehouse"
+      );
+      if (warehouse?.defaultTab) {
+        return "warehouse";
+      }
+      return "pharmacist";
+    },
+    [rolePreferences]
+  );
+
   const resetAll = useCallback(async (): Promise<OperationResult> => {
     clearWriteError();
     try {
@@ -332,6 +390,9 @@ export function useInventoryStore() {
     removeSafetyStockRule,
     exportSnapshot,
     updateRolePreference,
+    addRecentSearch,
+    selectRolePreference,
+    selectCurrentRoleOrDefault,
     resetAll,
     pendingSyncCount,
   };
