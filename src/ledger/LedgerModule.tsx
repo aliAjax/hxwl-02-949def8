@@ -15,7 +15,6 @@ import {
 import {
   checkBatchNoExists,
   daysUntilExpiry,
-  selectAllAuditLogs,
   selectBatches,
   selectCurrentStock,
   selectExpiryStatus,
@@ -100,7 +99,6 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
   const [logDateTo, setLogDateTo] = useState("");
 
   const batches = selectBatches(state);
-  const allAuditLogs = selectAllAuditLogs(state);
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -139,23 +137,14 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
   );
 
   const auditLogBase = useMemo(() => {
-    let logs = allAuditLogs;
-    if (logOperatorFilter.trim()) {
-      const q = logOperatorFilter.trim().toLowerCase();
-      logs = logs.filter((l) => l.operator.toLowerCase().includes(q));
-    }
-    if (logDateFrom) {
-      const from = new Date(logDateFrom);
-      from.setHours(0, 0, 0, 0);
-      logs = logs.filter((l) => new Date(l.createdAt) >= from);
-    }
-    if (logDateTo) {
-      const to = new Date(logDateTo);
-      to.setHours(23, 59, 59, 999);
-      logs = logs.filter((l) => new Date(l.createdAt) <= to);
-    }
-    return logs;
-  }, [allAuditLogs, logOperatorFilter, logDateFrom, logDateTo]);
+    return selectFilteredAuditLogs(state, {
+      batchNo: logBatchFilter,
+      logType: "all",
+      operator: logOperatorFilter,
+      dateFrom: logDateFrom,
+      dateTo: logDateTo,
+    });
+  }, [state, logBatchFilter, logOperatorFilter, logDateFrom, logDateTo]);
 
   const auditLogTypeCounts = useMemo(() => {
     const counts: Record<string, number> = { all: auditLogBase.length };
@@ -349,7 +338,7 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
             <h2>库存变动历史追踪</h2>
           </div>
           <span className="ledger-summary">
-            共 {auditLogBase.length} 条流水记录
+            共 {filteredAuditLogs.length} 条流水记录
           </span>
         </div>
 
