@@ -614,9 +614,7 @@ export function selectLowStockHerbCountWithRules(
   ledgerState: LedgerState,
   safetyStockState: SafetyStockState
 ): number {
-  const lowStockBatches = selectLowStockBatchesWithRules(ledgerState, safetyStockState);
-  const herbNames = new Set(lowStockBatches.map((b) => b.name));
-  return herbNames.size;
+  return selectLowStockHerbList(ledgerState, safetyStockState).length;
 }
 
 export interface LowStockHerbItem {
@@ -634,11 +632,9 @@ export function selectLowStockHerbList(
   ledgerState: LedgerState,
   safetyStockState: SafetyStockState
 ): LowStockHerbItem[] {
-  const lowStockBatches = selectLowStockBatchesWithRules(ledgerState, safetyStockState);
-
   const map = new Map<string, LowStockHerbItem>();
 
-  for (const batch of lowStockBatches) {
+  for (const batch of selectAllBatches(ledgerState)) {
     const stock = selectCurrentStock(ledgerState, batch.id);
     const existing = map.get(batch.name);
 
@@ -665,7 +661,9 @@ export function selectLowStockHerbList(
     }
   }
 
-  const list = Array.from(map.values());
+  const list = Array.from(map.values()).filter((item) =>
+    isLowStockWithRules(item.totalStock, item.thresholdGrams)
+  );
 
   for (const item of list) {
     item.shortageGrams = item.thresholdGrams - item.totalStock;
