@@ -6,14 +6,19 @@ import SafetyStockModule from "./ledger/SafetyStockModule";
 import LowStockModule from "./ledger/LowStockModule";
 import RoleWorkspaceModule from "./ledger/RoleWorkspaceModule";
 import {
+  BatchLedgerDTO,
+  checkBatchNoExists,
   createSeedState,
   createSeedSafetyStockState,
+  selectAllBatches,
   selectAllSafetyStockRules,
+  selectCurrentStock,
   selectLowStockHerbCountWithRules,
   selectNearExpiryCount,
   useLedgerStore,
   useSafetyStockStore,
 } from "./ledger/store";
+import { LOW_STOCK_GRAMS, NEAR_EXPIRY_DAYS } from "./ledger/types";
 
 interface InventoryRecord {
   name: string;
@@ -61,7 +66,9 @@ const project = {
     { key: "batch", label: "批号" },
     { key: "expiry", label: "有效期" },
     { key: "stockGrams", label: "库存克数" },
-    { key: "category", label: "功效分类" }
+    { key: "category", label: "功效分类" },
+    { key: "operator", label: "操作人" },
+    { key: "remark", label: "备注" }
   ] as const,
   "initialRecords": [
     {
@@ -101,7 +108,9 @@ const emptyForm: Record<string, string> = {
   batch: "",
   expiry: "",
   stockGrams: "",
-  category: ""
+  category: "",
+  operator: "",
+  remark: "",
 };
 
 const statusColors = ["status-ok", "status-watch", "status-danger"];
@@ -175,7 +184,7 @@ function MetricCard({ label, value, index }: { label: string; value: string; ind
 
 function App() {
   const ledgerStore = useLedgerStore(createSeedState);
-  const { state: ledgerState } = ledgerStore;
+  const { state: ledgerState, addBatch } = ledgerStore;
 
   const safetyStockStore = useSafetyStockStore(createSeedSafetyStockState);
   const { state: safetyStockState } = safetyStockStore;
@@ -199,9 +208,31 @@ function App() {
 
   const [formData, setFormData] = useState<Record<string, string>>({ ...emptyForm });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [records, setRecords] = useState<InventoryRecord[]>([...project.initialRecords]);
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock" | "workspace">("workspace");
+
+  const records = useMemo<InventoryRecord[]>(() => {
+    const batches = selectAllBatches(ledgerState);
+    const result: InventoryRecord[] = batches.map((batch: BatchLedgerDTO) => ({
+      name: batch.name,
+      spec: batch.spec,
+      origin: batch.origin,
+      batch: batch.batchNo,
+      expiry: batch.expiry,
+      stockGrams: selectCurrentStock(ledgerState, batch.id),
+      category: batch.category,
+    }));
+    result.sort((a, b) => {
+      const aBatch = Object.values(ledgerState.batches).find(
+        (x) => !x.isDeleted && x.batchNo === a.batch
+      );
+      const bBatch = Object.values(ledgerState.batches).find(
+        (x) => !x.isDeleted && x.batchNo === b.batch
+      );
+      return (bBatch?.createdAt || "").localeCompare(aBatch?.createdAt || "");
+    });
+    return result;
+  }, [ledgerState]);
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -234,6 +265,12 @@ function App() {
       }
     }
 
+    if (formData.batch && formData.batch.trim()) {
+      if (checkBatchNoExists(ledgerState, formData.batch.trim())) {
+        nextErrors.batch = "该批号已存在，请勿重复录入";
+      }
+    }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -241,19 +278,25 @@ function App() {
   const handleSubmit = () => {
     if (!validate()) return;
 
-    const newRecord: InventoryRecord = {
-      name: formData.name.trim(),
-      spec: formData.spec.trim(),
-      origin: formData.origin.trim(),
-      batch: formData.batch.trim(),
-      expiry: formData.expiry.trim(),
-      stockGrams: Number(formData.stockGrams),
-      category: formData.category.trim()
-    };
+    try {
+      addBatch({
+        name: formData.name.trim(),
+        spec: formData.spec.trim(),
+        origin: formData.origin.trim(),
+        category: formData.category.trim(),
+        batchNo: formData.batch.trim(),
+        expiry: formData.expiry.trim(),
+        unit: "g",
+        initialStock: Number(formData.stockGrams),
+        operator: formData.operator.trim() || "录入员",
+        remark: formData.remark.trim() || "库存录入看板新增",
+      });
 
-    setRecords((prev) => [newRecord, ...prev]);
-    setFormData({ ...emptyForm });
-    setErrors({});
+      setFormData({ ...emptyForm });
+      setErrors({});
+    } catch (e) {
+      setErrors({ submit: "录入失败，请稍后重试" });
+    }
   };
 
   const toggleFilter = (filter: string) => {
