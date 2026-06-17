@@ -86,3 +86,26 @@ export const WARNING_EXPIRY_DAYS_30 = 30;
 export const LOW_STOCK_GRAMS = 1200;
 
 export const CATEGORIES = ["补气", "清热", "活血", "化湿"];
+
+export type SafetyStockRuleType = "category" | "herb";
+
+export interface SafetyStockRuleDTO extends BaseEntity {
+  name: string;
+  ruleType: SafetyStockRuleType;
+  target: string;
+  thresholdGrams: number;
+}
+
+export interface SafetyStockState {
+  schemaVersion: number;
+  rules: Record<string, SafetyStockRuleDTO>;
+}
+
+export interface NewSafetyStockRuleInput {
+  name: string;
+  ruleType: SafetyStockRuleType;
+  target: string;
+  thresholdGrams: number;
+}
+
+export const SAFETY_STOCK_SCHEMA_VERSION = 1;

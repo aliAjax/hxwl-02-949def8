@@ -2,21 +2,21 @@ import { useMemo, useState } from "react";
 import {
   CATEGORIES,
   LedgerOperationDTO,
-  LOW_STOCK_GRAMS,
   NewBatchInput,
   OPERATION_LABELS,
   OPERATION_SIGNS,
   OperationType,
+  SafetyStockState,
 } from "./types";
 import {
   checkBatchNoExists,
   daysUntilExpiry,
-  isLowStock,
   selectBatches,
   selectCurrentStock,
   selectExpiryStatus,
   selectPendingSyncCount,
   selectRecentOperations,
+  selectSafetyStockThresholdForHerb,
 } from "./store";
 import type { LedgerStore } from "./store";
 
@@ -78,9 +78,10 @@ function expiryBadgeText(expiry: string): { text: string; className: string } {
 
 interface LedgerModuleProps {
   store: LedgerStore;
+  safetyStockState: SafetyStockState;
 }
 
-function LedgerModule({ store }: LedgerModuleProps) {
+function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
   const { state, addBatch, recordOperation } = store;
   const [showForm, setShowForm] = useState(false);
   const [batchForm, setBatchForm] = useState({ ...emptyBatchForm });
@@ -276,6 +277,7 @@ function LedgerModule({ store }: LedgerModuleProps) {
                     key={batch.id}
                     batchId={batch.id}
                     stateRef={state}
+                    safetyStockState={safetyStockState}
                     onRecord={recordOperation}
                   />
                 ))}
@@ -291,10 +293,11 @@ function LedgerModule({ store }: LedgerModuleProps) {
 interface BatchLedgerCardProps {
   batchId: string;
   stateRef: LedgerStore["state"];
+  safetyStockState: SafetyStockState;
   onRecord: LedgerStore["recordOperation"];
 }
 
-function BatchLedgerCard({ batchId, stateRef, onRecord }: BatchLedgerCardProps) {
+function BatchLedgerCard({ batchId, stateRef, safetyStockState, onRecord }: BatchLedgerCardProps) {
   const state = stateRef;
   const batch = state.batches[batchId];
   const [opForm, setOpForm] = useState({ ...emptyOpForm });
@@ -305,7 +308,12 @@ function BatchLedgerCard({ batchId, stateRef, onRecord }: BatchLedgerCardProps) 
   const currentStock = selectCurrentStock(state, batchId);
   const recentOps = selectRecentOperations(state, batchId, 4);
   const expiryBadge = expiryBadgeText(batch.expiry);
-  const low = isLowStock(currentStock);
+  const threshold = selectSafetyStockThresholdForHerb(
+    safetyStockState,
+    batch.name,
+    batch.category
+  );
+  const low = currentStock < threshold;
 
   const submitOp = () => {
     const qty = Number(opForm.quantity);
@@ -356,7 +364,7 @@ function BatchLedgerCard({ batchId, stateRef, onRecord }: BatchLedgerCardProps) 
           <strong className={low ? "stock-low" : ""}>
             {currentStock} <i>{batch.unit}</i>
           </strong>
-          {low && <span className="stock-hint">低于安全库存 {LOW_STOCK_GRAMS}g</span>}
+          {low && <span className="stock-hint">低于安全库存 {threshold}g</span>}
         </div>
       </div>
 

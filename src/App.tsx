@@ -2,11 +2,15 @@ import { useMemo, useState } from "react";
 import "./styles.css";
 import LedgerModule from "./ledger/LedgerModule";
 import ExpiryAlertModule from "./ledger/ExpiryAlertModule";
+import SafetyStockModule from "./ledger/SafetyStockModule";
 import {
   createSeedState,
-  selectLowStockBatches,
+  createSeedSafetyStockState,
+  selectAllSafetyStockRules,
+  selectLowStockHerbCountWithRules,
   selectNearExpiryCount,
   useLedgerStore,
+  useSafetyStockStore,
 } from "./ledger/store";
 
 interface InventoryRecord {
@@ -171,22 +175,31 @@ function App() {
   const ledgerStore = useLedgerStore(createSeedState);
   const { state: ledgerState } = ledgerStore;
 
-  const lowStockBatches = useMemo(() => selectLowStockBatches(ledgerState), [ledgerState]);
+  const safetyStockStore = useSafetyStockStore(createSeedSafetyStockState);
+  const { state: safetyStockState } = safetyStockStore;
+
+  const lowStockHerbCount = useMemo(
+    () => selectLowStockHerbCountWithRules(ledgerState, safetyStockState),
+    [ledgerState, safetyStockState]
+  );
   const nearExpiryCount = useMemo(() => selectNearExpiryCount(ledgerState), [ledgerState]);
-  const lowStockCount = lowStockBatches.length;
+  const safetyStockRuleCount = useMemo(
+    () => selectAllSafetyStockRules(safetyStockState).length,
+    [safetyStockState]
+  );
 
   const metricValues = [
     String(nearExpiryCount),
-    String(lowStockCount),
+    String(lowStockHerbCount),
     "31",
-    "7",
+    String(safetyStockRuleCount),
   ];
 
   const [formData, setFormData] = useState<Record<string, string>>({ ...emptyForm });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [records, setRecords] = useState<InventoryRecord[]>([...project.initialRecords]);
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [tab, setTab] = useState<"entry" | "ledger" | "alert">("entry");
+  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety">("entry");
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -304,12 +317,23 @@ function App() {
         >
           近效期预警中心
         </button>
+        <button
+          className={tab === "safety" ? "tab tab-active" : "tab"}
+          onClick={() => setTab("safety")}
+        >
+          安全库存规则
+        </button>
       </nav>
 
       {tab === "ledger" ? (
-        <LedgerModule store={ledgerStore} />
+        <LedgerModule store={ledgerStore} safetyStockState={safetyStockState} />
       ) : tab === "alert" ? (
         <ExpiryAlertModule store={ledgerStore} />
+      ) : tab === "safety" ? (
+        <SafetyStockModule
+          safetyStockStore={safetyStockStore}
+          ledgerStore={ledgerStore}
+        />
       ) : (
         <>
       <section className="metrics-grid">

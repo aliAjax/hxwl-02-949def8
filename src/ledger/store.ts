@@ -10,8 +10,12 @@ import {
   NEAR_EXPIRY_DAYS,
   NewBatchInput,
   NewOperationInput,
+  NewSafetyStockRuleInput,
   OperationResult,
   OperationType,
+  SAFETY_STOCK_SCHEMA_VERSION,
+  SafetyStockRuleDTO,
+  SafetyStockState,
   SCHEMA_VERSION,
   SyncStatus,
   WARNING_EXPIRY_DAYS_30,
@@ -529,3 +533,249 @@ export function useLedgerStore(initial?: LedgerState | (() => LedgerState)) {
 }
 
 export type LedgerStore = ReturnType<typeof useLedgerStore>;
+
+export function createEmptySafetyStockState(): SafetyStockState {
+  return {
+    schemaVersion: SAFETY_STOCK_SCHEMA_VERSION,
+    rules: {},
+  };
+}
+
+export function selectAllSafetyStockRules(
+  state: SafetyStockState
+): SafetyStockRuleDTO[] {
+  return Object.values(state.rules)
+    .filter((r) => !r.isDeleted)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+}
+
+export function selectSafetyStockRuleById(
+  state: SafetyStockState,
+  ruleId: string
+): SafetyStockRuleDTO | undefined {
+  const rule = state.rules[ruleId];
+  return rule && !rule.isDeleted ? rule : undefined;
+}
+
+export function checkSafetyStockRuleNameExists(
+  state: SafetyStockState,
+  name: string,
+  excludeId?: string
+): boolean {
+  return Object.values(state.rules).some(
+    (r) => !r.isDeleted && r.name === name && r.id !== excludeId
+  );
+}
+
+export function selectSafetyStockThresholdForHerb(
+  state: SafetyStockState,
+  herbName: string,
+  category: string
+): number {
+  const rules = selectAllSafetyStockRules(state);
+  const herbRule = rules.find(
+    (r) => r.ruleType === "herb" && r.target === herbName
+  );
+  if (herbRule) {
+    return herbRule.thresholdGrams;
+  }
+  const categoryRule = rules.find(
+    (r) => r.ruleType === "category" && r.target === category
+  );
+  if (categoryRule) {
+    return categoryRule.thresholdGrams;
+  }
+  return LOW_STOCK_GRAMS;
+}
+
+export function isLowStockWithRules(
+  stock: number,
+  threshold: number
+): boolean {
+  return stock < threshold;
+}
+
+export function selectLowStockBatchesWithRules(
+  ledgerState: LedgerState,
+  safetyStockState: SafetyStockState
+): BatchLedgerDTO[] {
+  return selectAllBatches(ledgerState).filter((b) => {
+    const stock = selectCurrentStock(ledgerState, b.id);
+    const threshold = selectSafetyStockThresholdForHerb(
+      safetyStockState,
+      b.name,
+      b.category
+    );
+    return isLowStockWithRules(stock, threshold);
+  });
+}
+
+export function selectLowStockHerbCountWithRules(
+  ledgerState: LedgerState,
+  safetyStockState: SafetyStockState
+): number {
+  const lowStockBatches = selectLowStockBatchesWithRules(ledgerState, safetyStockState);
+  const herbNames = new Set(lowStockBatches.map((b) => b.name));
+  return herbNames.size;
+}
+
+export function createSafetyStockRule(
+  state: SafetyStockState,
+  input: NewSafetyStockRuleInput
+): { state: SafetyStockState; ruleId: string } {
+  const ruleId = createId("ssr");
+  const rule: SafetyStockRuleDTO = {
+    ...createBaseEntity(ruleId),
+    name: input.name,
+    ruleType: input.ruleType,
+    target: input.target,
+    thresholdGrams: input.thresholdGrams,
+  };
+  return {
+    ruleId,
+    state: {
+      ...state,
+      rules: { ...state.rules, [ruleId]: rule },
+    },
+  };
+}
+
+export function updateSafetyStockRule(
+  state: SafetyStockState,
+  ruleId: string,
+  input: Partial<NewSafetyStockRuleInput>
+): OperationResult & { state?: SafetyStockState } {
+  const existing = selectSafetyStockRuleById(state, ruleId);
+  if (!existing) {
+    return { ok: false, error: "规则不存在" };
+  }
+  const updated: SafetyStockRuleDTO = {
+    ...existing,
+    ...input,
+    updatedAt: nowIso(),
+    syncStatus: "pending",
+  };
+  return {
+    ok: true,
+    state: {
+      ...state,
+      rules: { ...state.rules, [ruleId]: updated },
+    },
+  };
+}
+
+export function deleteSafetyStockRule(
+  state: SafetyStockState,
+  ruleId: string
+): OperationResult & { state?: SafetyStockState } {
+  const existing = selectSafetyStockRuleById(state, ruleId);
+  if (!existing) {
+    return { ok: false, error: "规则不存在" };
+  }
+  const updated: SafetyStockRuleDTO = {
+    ...existing,
+    isDeleted: true,
+    updatedAt: nowIso(),
+    syncStatus: "pending",
+  };
+  return {
+    ok: true,
+    state: {
+      ...state,
+      rules: { ...state.rules, [ruleId]: updated },
+    },
+  };
+}
+
+export function createSeedSafetyStockState(): SafetyStockState {
+  const seedRules: SafetyStockRuleDTO[] = [
+    {
+      ...createBaseEntity("ssr_buqi"),
+      name: "补气类安全库存",
+      ruleType: "category",
+      target: "补气",
+      thresholdGrams: 1500,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      syncStatus: "synced",
+    },
+    {
+      ...createBaseEntity("ssr_huangqi"),
+      name: "黄芪专属安全库存",
+      ruleType: "herb",
+      target: "黄芪",
+      thresholdGrams: 2000,
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+      syncStatus: "synced",
+    },
+    {
+      ...createBaseEntity("ssr_qingre"),
+      name: "清热类安全库存",
+      ruleType: "category",
+      target: "清热",
+      thresholdGrams: 1000,
+      createdAt: "2026-01-15T00:00:00.000Z",
+      updatedAt: "2026-01-15T00:00:00.000Z",
+      syncStatus: "synced",
+    },
+  ];
+
+  const rules: Record<string, SafetyStockRuleDTO> = {};
+  for (const rule of seedRules) {
+    rules[rule.id] = rule;
+  }
+
+  return {
+    schemaVersion: SAFETY_STOCK_SCHEMA_VERSION,
+    rules,
+  };
+}
+
+export function useSafetyStockStore(
+  initial?: SafetyStockState | (() => SafetyStockState)
+) {
+  const [state, setState] = useState<SafetyStockState>(() => {
+    if (typeof initial === "function") {
+      return (initial as () => SafetyStockState)();
+    }
+    return initial ?? createEmptySafetyStockState();
+  });
+
+  const addRule = useCallback(
+    (input: NewSafetyStockRuleInput): string => {
+      const result = createSafetyStockRule(state, input);
+      setState(result.state);
+      return result.ruleId;
+    },
+    [state]
+  );
+
+  const updateRule = useCallback(
+    (ruleId: string, input: Partial<NewSafetyStockRuleInput>): OperationResult => {
+      const result = updateSafetyStockRule(state, ruleId, input);
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+      setState(result.state as SafetyStockState);
+      return { ok: true };
+    },
+    [state]
+  );
+
+  const removeRule = useCallback(
+    (ruleId: string): OperationResult => {
+      const result = deleteSafetyStockRule(state, ruleId);
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+      setState(result.state as SafetyStockState);
+      return { ok: true };
+    },
+    [state]
+  );
+
+  return { state, addRule, updateRule, removeRule };
+}
+
+export type SafetyStockStore = ReturnType<typeof useSafetyStockStore>;
