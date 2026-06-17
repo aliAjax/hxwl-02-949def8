@@ -4,7 +4,6 @@ import LedgerModule from "./ledger/LedgerModule";
 import ExpiryAlertModule from "./ledger/ExpiryAlertModule";
 import {
   createSeedState,
-  countBatchesByAlertLevel,
   selectLowStockBatches,
   selectNearExpiryCount,
   useLedgerStore,
@@ -172,7 +171,6 @@ function App() {
   const ledgerStore = useLedgerStore(createSeedState);
   const { state: ledgerState } = ledgerStore;
 
-  const alertCounts = useMemo(() => countBatchesByAlertLevel(ledgerState), [ledgerState]);
   const lowStockBatches = useMemo(() => selectLowStockBatches(ledgerState), [ledgerState]);
   const nearExpiryCount = useMemo(() => selectNearExpiryCount(ledgerState), [ledgerState]);
   const lowStockCount = lowStockBatches.length;
