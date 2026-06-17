@@ -1,5 +1,7 @@
 export type OperationType = "inbound" | "outbound" | "loss";
 
+export type AuditLogType = "create_batch" | "inbound" | "outbound" | "loss" | "update_safety_stock";
+
 export type SyncStatus = "pending" | "synced" | "conflict" | "error";
 
 export const SCHEMA_VERSION = 1;
@@ -32,10 +34,23 @@ export interface LedgerOperationDTO extends BaseEntity {
   remark: string;
 }
 
+export interface InventoryAuditLogDTO extends BaseEntity {
+  logType: AuditLogType;
+  herbName: string;
+  batchNo: string;
+  changeGrams: number;
+  operator: string;
+  remark: string;
+  safetyStockBefore?: number;
+  safetyStockAfter?: number;
+  safetyStockTarget?: string;
+}
+
 export interface LedgerState {
   schemaVersion: number;
   batches: Record<string, BatchLedgerDTO>;
   operations: LedgerOperationDTO[];
+  auditLogs: InventoryAuditLogDTO[];
   lastSyncedAt?: string;
 }
 
@@ -73,6 +88,22 @@ export const OPERATION_LABELS: Record<OperationType, string> = {
   inbound: "入库",
   outbound: "出库",
   loss: "损耗",
+};
+
+export const AUDIT_LOG_LABELS: Record<AuditLogType, string> = {
+  create_batch: "新增批号",
+  inbound: "入库",
+  outbound: "出库",
+  loss: "损耗",
+  update_safety_stock: "修改安全库存",
+};
+
+export const AUDIT_LOG_SIGNS: Record<AuditLogType, string> = {
+  create_batch: "+",
+  inbound: "+",
+  outbound: "-",
+  loss: "-",
+  update_safety_stock: "→",
 };
 
 export const OPERATION_SIGNS: Record<OperationType, string> = {

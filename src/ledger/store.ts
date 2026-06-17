@@ -1,9 +1,12 @@
 import { useCallback, useState } from "react";
 import {
   AlertLevel,
+  AUDIT_LOG_LABELS,
+  AuditLogType,
   BaseEntity,
   BatchLedgerDTO,
   ExpiryStatus,
+  InventoryAuditLogDTO,
   LedgerOperationDTO,
   LedgerState,
   LOW_STOCK_GRAMS,
@@ -48,6 +51,32 @@ export function createEmptyState(): LedgerState {
     schemaVersion: SCHEMA_VERSION,
     batches: {},
     operations: [],
+    auditLogs: [],
+  };
+}
+
+function createAuditLog(params: {
+  logType: AuditLogType;
+  herbName: string;
+  batchNo: string;
+  changeGrams: number;
+  operator: string;
+  remark: string;
+  safetyStockBefore?: number;
+  safetyStockAfter?: number;
+  safetyStockTarget?: string;
+}): InventoryAuditLogDTO {
+  return {
+    ...createBaseEntity(createId("log")),
+    logType: params.logType,
+    herbName: params.herbName,
+    batchNo: params.batchNo,
+    changeGrams: params.changeGrams,
+    operator: params.operator || "系统",
+    remark: params.remark,
+    safetyStockBefore: params.safetyStockBefore,
+    safetyStockAfter: params.safetyStockAfter,
+    safetyStockTarget: params.safetyStockTarget,
   };
 }
 
@@ -58,7 +87,43 @@ export function selectPendingSyncCount(state: LedgerState): number {
   const pendingOps = state.operations.filter(
     (o) => !o.isDeleted && o.syncStatus !== "synced"
   ).length;
-  return pendingBatches + pendingOps;
+  const pendingLogs = state.auditLogs.filter(
+    (l) => !l.isDeleted && l.syncStatus !== "synced"
+  ).length;
+  return pendingBatches + pendingOps + pendingLogs;
+}
+
+export function selectAllAuditLogs(state: LedgerState): InventoryAuditLogDTO[] {
+  return state.auditLogs.filter((l) => !l.isDeleted);
+}
+
+export function selectAuditLogsByBatchNo(
+  state: LedgerState,
+  batchNo: string
+): InventoryAuditLogDTO[] {
+  return selectAllAuditLogs(state).filter((l) => l.batchNo === batchNo);
+}
+
+export function selectAuditLogsByType(
+  state: LedgerState,
+  logType: AuditLogType
+): InventoryAuditLogDTO[] {
+  return selectAllAuditLogs(state).filter((l) => l.logType === logType);
+}
+
+export function selectFilteredAuditLogs(
+  state: LedgerState,
+  filters: { batchNo?: string; logType?: AuditLogType | "all" }
+): InventoryAuditLogDTO[] {
+  let logs = selectAllAuditLogs(state);
+  if (filters.batchNo && filters.batchNo.trim()) {
+    const q = filters.batchNo.trim().toLowerCase();
+    logs = logs.filter((l) => l.batchNo.toLowerCase().includes(q));
+  }
+  if (filters.logType && filters.logType !== "all") {
+    logs = logs.filter((l) => l.logType === filters.logType);
+  }
+  return logs;
 }
 
 export function selectBatchByNo(
@@ -150,6 +215,7 @@ export function migrateState(state: LedgerState): LedgerState {
     ...createEmptyState(),
     ...state,
     schemaVersion: SCHEMA_VERSION,
+    auditLogs: state.auditLogs ?? [],
   };
 
   for (const id of Object.keys(migrated.batches)) {
@@ -162,6 +228,11 @@ export function migrateState(state: LedgerState): LedgerState {
   migrated.operations = migrated.operations.map((op) => ({
     ...createBaseEntity(op.id),
     ...op,
+  }));
+
+  migrated.auditLogs = migrated.auditLogs.map((log) => ({
+    ...createBaseEntity(log.id),
+    ...log,
   }));
 
   return migrated;
@@ -184,10 +255,16 @@ export function markSynced(
     syncStatus: "synced" as SyncStatus,
     updatedAt: timestamp,
   }));
+  const auditLogs = state.auditLogs.map((log) => ({
+    ...log,
+    syncStatus: "synced" as SyncStatus,
+    updatedAt: timestamp,
+  }));
   return {
     ...state,
     batches,
     operations,
+    auditLogs,
     lastSyncedAt: timestamp,
   };
 }
@@ -329,12 +406,21 @@ export function createBatch(
     operator: input.operator || "系统",
     remark: input.remark || "期初入库",
   };
+  const auditLog: InventoryAuditLogDTO = createAuditLog({
+    logType: "create_batch",
+    herbName: input.name,
+    batchNo: input.batchNo,
+    changeGrams: input.initialStock,
+    operator: input.operator || "系统",
+    remark: input.remark || `新增批号，期初库存 ${input.initialStock}${input.unit || "g"}`,
+  });
   return {
     batchId,
     state: {
       ...state,
       batches: { ...state.batches, [batchId]: batch },
       operations: [openingOp, ...state.operations],
+      auditLogs: [auditLog, ...state.auditLogs],
     },
   };
 }
@@ -371,6 +457,16 @@ export function applyOperation(
     operator: input.operator || "系统",
     remark: input.remark,
   };
+  const changeGrams =
+    input.type === "inbound" ? input.quantity : -input.quantity;
+  const auditLog: InventoryAuditLogDTO = createAuditLog({
+    logType: input.type as AuditLogType,
+    herbName: batch.name,
+    batchNo: batch.batchNo,
+    changeGrams,
+    operator: input.operator || "系统",
+    remark: input.remark || `${AUDIT_LOG_LABELS[input.type as AuditLogType]} ${input.quantity}${batch.unit}`,
+  });
   return {
     ok: true,
     state: {
@@ -380,6 +476,7 @@ export function applyOperation(
         [input.batchId]: { ...batch, updatedAt: ts, syncStatus: "pending" },
       },
       operations: [op, ...state.operations],
+      auditLogs: [auditLog, ...state.auditLogs],
     },
   };
 }
@@ -395,11 +492,14 @@ interface SeedMovement {
 function buildBatch(
   base: Omit<BatchLedgerDTO, "updatedAt" | "isDeleted" | "syncStatus" | "serverId">,
   movements: SeedMovement[]
-): { batch: BatchLedgerDTO; ops: LedgerOperationDTO[] } {
+): { batch: BatchLedgerDTO; ops: LedgerOperationDTO[]; logs: InventoryAuditLogDTO[] } {
   let balance = 0;
-  const opsChrono: LedgerOperationDTO[] = movements.map((m) => {
+  const opsChrono: LedgerOperationDTO[] = [];
+  const logsChrono: InventoryAuditLogDTO[] = [];
+
+  movements.forEach((m, idx) => {
     balance = m.type === "inbound" ? balance + m.quantity : balance - m.quantity;
-    return {
+    const op: LedgerOperationDTO = {
       ...createBaseEntity(createId("op")),
       batchId: base.id,
       type: m.type,
@@ -410,8 +510,42 @@ function buildBatch(
       createdAt: m.createdAt,
       updatedAt: m.createdAt,
     };
+    opsChrono.push(op);
+
+    if (idx === 0 && m.type === "inbound" && m.remark.includes("期初入库")) {
+      const createLog: InventoryAuditLogDTO = {
+        ...createBaseEntity(createId("log")),
+        logType: "create_batch",
+        herbName: base.name,
+        batchNo: base.batchNo,
+        changeGrams: m.quantity,
+        operator: m.operator,
+        remark: `新增批号，期初库存 ${m.quantity}${base.unit}`,
+        createdAt: m.createdAt,
+        updatedAt: m.createdAt,
+        syncStatus: "synced",
+      };
+      logsChrono.push(createLog);
+    } else {
+      const changeGrams = m.type === "inbound" ? m.quantity : -m.quantity;
+      const log: InventoryAuditLogDTO = {
+        ...createBaseEntity(createId("log")),
+        logType: m.type as AuditLogType,
+        herbName: base.name,
+        batchNo: base.batchNo,
+        changeGrams,
+        operator: m.operator,
+        remark: m.remark || `${AUDIT_LOG_LABELS[m.type as AuditLogType]} ${m.quantity}${base.unit}`,
+        createdAt: m.createdAt,
+        updatedAt: m.createdAt,
+        syncStatus: "synced",
+      };
+      logsChrono.push(log);
+    }
   });
+
   const opsDesc = [...opsChrono].reverse();
+  const logsDesc = [...logsChrono].reverse();
   const updatedAt = opsChrono.length
     ? opsChrono[opsChrono.length - 1].createdAt
     : base.createdAt;
@@ -424,6 +558,7 @@ function buildBatch(
       syncStatus: "synced",
     },
     ops: opsDesc,
+    logs: logsDesc,
   };
 }
 
@@ -487,15 +622,19 @@ export function createSeedState(): LedgerState {
 
   const batches: Record<string, BatchLedgerDTO> = {};
   const operations: LedgerOperationDTO[] = [];
+  const auditLogs: InventoryAuditLogDTO[] = [];
   for (const g of groups) {
     batches[g.batch.id] = g.batch;
     operations.push(...g.ops);
+    auditLogs.push(...g.logs);
   }
   operations.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  auditLogs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   return {
     schemaVersion: SCHEMA_VERSION,
     batches,
     operations,
+    auditLogs,
     lastSyncedAt: nowIso(),
   };
 }
@@ -529,7 +668,37 @@ export function useLedgerStore(initial?: LedgerState | (() => LedgerState)) {
     [state]
   );
 
-  return { state, addBatch, recordOperation };
+  const recordSafetyStockChange = useCallback(
+    (params: {
+      herbName: string;
+      batchNo: string;
+      operator: string;
+      remark: string;
+      safetyStockBefore: number;
+      safetyStockAfter: number;
+      safetyStockTarget: string;
+    }): OperationResult => {
+      const auditLog: InventoryAuditLogDTO = createAuditLog({
+        logType: "update_safety_stock",
+        herbName: params.herbName,
+        batchNo: params.batchNo,
+        changeGrams: params.safetyStockAfter - params.safetyStockBefore,
+        operator: params.operator || "系统",
+        remark: params.remark || `安全库存从 ${params.safetyStockBefore}g 调整为 ${params.safetyStockAfter}g`,
+        safetyStockBefore: params.safetyStockBefore,
+        safetyStockAfter: params.safetyStockAfter,
+        safetyStockTarget: params.safetyStockTarget,
+      });
+      setState((prev) => ({
+        ...prev,
+        auditLogs: [auditLog, ...prev.auditLogs],
+      }));
+      return { ok: true };
+    },
+    []
+  );
+
+  return { state, addBatch, recordOperation, recordSafetyStockChange };
 }
 
 export type LedgerStore = ReturnType<typeof useLedgerStore>;

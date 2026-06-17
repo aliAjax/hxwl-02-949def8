@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import {
+  AUDIT_LOG_LABELS,
+  AUDIT_LOG_SIGNS,
+  AuditLogType,
   CATEGORIES,
+  InventoryAuditLogDTO,
   LedgerOperationDTO,
   NewBatchInput,
   OPERATION_LABELS,
@@ -11,9 +15,11 @@ import {
 import {
   checkBatchNoExists,
   daysUntilExpiry,
+  selectAllAuditLogs,
   selectBatches,
   selectCurrentStock,
   selectExpiryStatus,
+  selectFilteredAuditLogs,
   selectPendingSyncCount,
   selectRecentOperations,
   selectSafetyStockThresholdForHerb,
@@ -87,8 +93,11 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
   const [batchForm, setBatchForm] = useState({ ...emptyBatchForm });
   const [batchErrors, setBatchErrors] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  const [logBatchFilter, setLogBatchFilter] = useState("");
+  const [logTypeFilter, setLogTypeFilter] = useState<AuditLogType | "all">("all");
 
   const batches = selectBatches(state);
+  const allAuditLogs = selectAllAuditLogs(state);
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -113,6 +122,23 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
       unit: items[0]?.unit ?? "g",
     }));
   }, [batches, query, state]);
+
+  const filteredAuditLogs = useMemo(
+    () =>
+      selectFilteredAuditLogs(state, {
+        batchNo: logBatchFilter,
+        logType: logTypeFilter,
+      }),
+    [state, logBatchFilter, logTypeFilter]
+  );
+
+  const auditLogTypeCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: allAuditLogs.length };
+    for (const log of allAuditLogs) {
+      counts[log.logType] = (counts[log.logType] ?? 0) + 1;
+    }
+    return counts;
+  }, [allAuditLogs]);
 
   const handleBatchField = (key: keyof typeof emptyBatchForm, value: string) => {
     setBatchForm((prev) => ({ ...prev, [key]: value }));
@@ -286,6 +312,94 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
           ))}
         </div>
       )}
+
+      <section className="audit-trail module panel">
+        <div className="section-heading">
+          <div>
+            <p>操作流水</p>
+            <h2>库存变动历史追踪</h2>
+          </div>
+          <span className="ledger-summary">
+            共 {allAuditLogs.length} 条流水记录
+          </span>
+        </div>
+
+        <div className="audit-toolbar">
+          <input
+            type="text"
+            value={logBatchFilter}
+            placeholder="按批号搜索"
+            onChange={(e) => setLogBatchFilter(e.target.value)}
+          />
+          <div className="audit-filter-chips">
+            <button
+              className={logTypeFilter === "all" ? "filter-active" : ""}
+              onClick={() => setLogTypeFilter("all")}
+            >
+              全部 ({auditLogTypeCounts.all ?? 0})
+            </button>
+            <button
+              className={`${logTypeFilter === "create_batch" ? "filter-active" : ""} audit-chip-create`}
+              onClick={() => setLogTypeFilter("create_batch")}
+            >
+              新增批号 ({auditLogTypeCounts.create_batch ?? 0})
+            </button>
+            <button
+              className={`${logTypeFilter === "inbound" ? "filter-active" : ""} audit-chip-inbound`}
+              onClick={() => setLogTypeFilter("inbound")}
+            >
+              入库 ({auditLogTypeCounts.inbound ?? 0})
+            </button>
+            <button
+              className={`${logTypeFilter === "outbound" ? "filter-active" : ""} audit-chip-outbound`}
+              onClick={() => setLogTypeFilter("outbound")}
+            >
+              出库 ({auditLogTypeCounts.outbound ?? 0})
+            </button>
+            <button
+              className={`${logTypeFilter === "loss" ? "filter-active" : ""} audit-chip-loss`}
+              onClick={() => setLogTypeFilter("loss")}
+            >
+              损耗 ({auditLogTypeCounts.loss ?? 0})
+            </button>
+            <button
+              className={`${logTypeFilter === "update_safety_stock" ? "filter-active" : ""} audit-chip-safety`}
+              onClick={() => setLogTypeFilter("update_safety_stock")}
+            >
+              改安全库存 ({auditLogTypeCounts.update_safety_stock ?? 0})
+            </button>
+          </div>
+        </div>
+
+        {filteredAuditLogs.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📋</div>
+            <h3>暂无流水记录</h3>
+            <p>
+              {logBatchFilter || logTypeFilter !== "all"
+                ? "当前筛选条件下没有找到符合的流水记录"
+                : "进行库存操作后会在此处显示流水记录"}
+            </p>
+            {(logBatchFilter || logTypeFilter !== "all") && (
+              <button
+                className="clear-filter"
+                onClick={() => {
+                  setLogBatchFilter("");
+                  setLogTypeFilter("all");
+                }}
+              >
+                清除筛选条件
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="audit-log-list">
+            {filteredAuditLogs.map((log) => (
+              <AuditLogRow key={log.id} log={log} />
+            ))}
+          </div>
+        )}
+      </section>
     </section>
   );
 }
@@ -452,6 +566,52 @@ function OperationRow({ op, unit }: { op: LedgerOperationDTO; unit: string }) {
         {op.operator}
         {op.remark ? ` · ${op.remark}` : ""}
       </span>
+    </div>
+  );
+}
+
+function AuditLogRow({ log }: { log: InventoryAuditLogDTO }) {
+  const label = AUDIT_LOG_LABELS[log.logType];
+  const sign = AUDIT_LOG_SIGNS[log.logType];
+  const isSafetyStock = log.logType === "update_safety_stock";
+
+  return (
+    <div className={`audit-log-item audit-${log.logType}`}>
+      <span className="audit-log-type">{label}</span>
+      <div className="audit-log-main">
+        <div className="audit-log-herb">
+          <strong>{log.herbName}</strong>
+          {log.batchNo !== "-" && (
+            <span className="audit-log-batch">批号: {log.batchNo}</span>
+          )}
+        </div>
+        <div className="audit-log-details">
+          {isSafetyStock ? (
+            <span className="audit-log-change audit-safety-change">
+              {log.safetyStockBefore}g → {log.safetyStockAfter}g
+              {log.changeGrams !== 0 && (
+                <span className={log.changeGrams > 0 ? "change-up" : "change-down"}>
+                  ({log.changeGrams > 0 ? "+" : ""}{log.changeGrams}g)
+                </span>
+              )}
+              {log.safetyStockTarget && (
+                <span className="audit-log-target">
+                  适用: {log.safetyStockTarget}
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className={`audit-log-change ${log.changeGrams >= 0 ? "change-up" : "change-down"}`}>
+              {sign}{Math.abs(log.changeGrams)}g
+            </span>
+          )}
+          <span className="audit-log-time">{formatDateTime(log.createdAt)}</span>
+        </div>
+      </div>
+      <div className="audit-log-right">
+        <span className="audit-log-operator">操作人: {log.operator}</span>
+        {log.remark && <span className="audit-log-remark">{log.remark}</span>}
+      </div>
     </div>
   );
 }

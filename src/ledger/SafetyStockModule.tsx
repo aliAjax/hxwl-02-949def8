@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  AUDIT_LOG_LABELS,
   CATEGORIES,
   SafetyStockRuleType,
 } from "./types";
@@ -15,6 +16,7 @@ const emptyRuleForm = {
   ruleType: "category" as SafetyStockRuleType,
   target: "",
   thresholdGrams: "",
+  operator: "",
 };
 
 const ruleFormFields: Array<{
@@ -27,6 +29,7 @@ const ruleFormFields: Array<{
   { key: "ruleType", label: "规则类型", type: "select", required: true },
   { key: "target", label: "适用对象", type: "select", required: true },
   { key: "thresholdGrams", label: "安全库存克数", type: "number", required: true },
+  { key: "operator", label: "操作人", type: "text", required: false },
 ];
 
 interface SafetyStockModuleProps {
@@ -36,7 +39,7 @@ interface SafetyStockModuleProps {
 
 function SafetyStockModule({ safetyStockStore, ledgerStore }: SafetyStockModuleProps) {
   const { state: ssState, addRule, updateRule, removeRule } = safetyStockStore;
-  const { state: ledgerState } = ledgerStore;
+  const { state: ledgerState, recordSafetyStockChange } = ledgerStore;
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -133,9 +136,49 @@ function SafetyStockModule({ safetyStockStore, ledgerStore }: SafetyStockModuleP
       target: ruleForm.target.trim(),
       thresholdGrams: Number(ruleForm.thresholdGrams),
     };
+    const operator = ruleForm.operator.trim();
 
     if (editingId) {
+      const existingRule = ssState.rules[editingId];
+      const beforeThreshold = existingRule?.thresholdGrams ?? 0;
+      const afterThreshold = input.thresholdGrams;
+
       updateRule(editingId, input);
+
+      if (beforeThreshold !== afterThreshold) {
+        const targetBatches =
+          input.ruleType === "herb"
+            ? Object.values(ledgerState.batches).filter(
+                (b) => !b.isDeleted && b.name === input.target
+              )
+            : Object.values(ledgerState.batches).filter(
+                (b) => !b.isDeleted && b.category === input.target
+              );
+
+        if (targetBatches.length > 0) {
+          targetBatches.forEach((batch) => {
+            recordSafetyStockChange({
+              herbName: batch.name,
+              batchNo: batch.batchNo,
+              operator: operator || "系统",
+              remark: `安全库存规则「${input.name}」调整：${beforeThreshold}g → ${afterThreshold}g`,
+              safetyStockBefore: beforeThreshold,
+              safetyStockAfter: afterThreshold,
+              safetyStockTarget: input.target,
+            });
+          });
+        } else {
+          recordSafetyStockChange({
+            herbName: input.ruleType === "herb" ? input.target : `【${input.target}】分类`,
+            batchNo: "-",
+            operator: operator || "系统",
+            remark: `安全库存规则「${input.name}」调整：${beforeThreshold}g → ${afterThreshold}g`,
+            safetyStockBefore: beforeThreshold,
+            safetyStockAfter: afterThreshold,
+            safetyStockTarget: input.target,
+          });
+        }
+      }
     } else {
       addRule(input);
     }
@@ -152,6 +195,7 @@ function SafetyStockModule({ safetyStockStore, ledgerStore }: SafetyStockModuleP
       ruleType: rule.ruleType,
       target: rule.target,
       thresholdGrams: String(rule.thresholdGrams),
+      operator: "",
     });
     setEditingId(ruleId);
     setShowForm(true);
