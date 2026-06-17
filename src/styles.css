@@ -1125,6 +1125,19 @@ select {
   .alert-batch-list {
     grid-template-columns: 1fr;
   }
+
+  .low-stock-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .low-stock-toolbar input {
+    max-width: none;
+  }
+
+  .low-stock-filter-chips {
+    justify-content: center;
+  }
 }
 
 .safety-stock.module {
@@ -1847,6 +1860,53 @@ select {
   background: #ffffff;
   color: var(--primary);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.low-stock-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.low-stock-toolbar input {
+  max-width: 320px;
+}
+
+.low-stock-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+}
+
+.low-stock-filter-chips button {
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: #526070;
+  transition: all 0.15s ease;
+}
+
+.low-stock-filter-chips button:hover {
+  border-color: color-mix(in srgb, var(--primary) 28%, #dbe3ef);
+  background: color-mix(in srgb, var(--primary) 8%, #ffffff);
+}
+
+.low-stock-filter-chips button.filter-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.low-stock-toolbar .export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .lowstock-herb-card {

@@ -3,6 +3,7 @@ import { CATEGORIES } from "./types";
 import {
   selectCurrentStock,
   selectLowStockHerbList,
+  exportLowStockListCsv,
   type LowStockHerbItem,
 } from "./store";
 import type { LedgerStore, SafetyStockStore } from "./store";
@@ -41,6 +42,21 @@ function LowStockModule({ ledgerStore, safetyStockStore }: LowStockModuleProps) 
 
   const toggleExpand = (name: string) => {
     setExpandedHerb((prev) => (prev === name ? null : name));
+  };
+
+  const handleExport = () => {
+    const csv = exportLowStockListCsv(filteredList);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    link.download = `低库存清单_${dateStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const stockPercentage = (item: LowStockHerbItem): number => {
@@ -109,6 +125,13 @@ function LowStockModule({ ledgerStore, safetyStockStore }: LowStockModuleProps) 
             </button>
           ))}
         </div>
+        <button
+          className="primary-action export-btn"
+          onClick={handleExport}
+          disabled={filteredList.length === 0}
+        >
+          导出CSV
+        </button>
       </div>
 
       {filteredList.length === 0 ? (
