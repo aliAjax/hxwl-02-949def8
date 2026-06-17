@@ -125,7 +125,7 @@ export function selectAuditLogsByType(
 
 export function selectFilteredAuditLogs(
   state: LedgerState,
-  filters: { batchNo?: string; logType?: AuditLogType | "all" }
+  filters: { batchNo?: string; logType?: AuditLogType | "all"; operator?: string; dateFrom?: string; dateTo?: string }
 ): InventoryAuditLogDTO[] {
   let logs = selectAllAuditLogs(state);
   if (filters.batchNo && filters.batchNo.trim()) {
@@ -134,6 +134,20 @@ export function selectFilteredAuditLogs(
   }
   if (filters.logType && filters.logType !== "all") {
     logs = logs.filter((l) => l.logType === filters.logType);
+  }
+  if (filters.operator && filters.operator.trim()) {
+    const q = filters.operator.trim().toLowerCase();
+    logs = logs.filter((l) => l.operator.toLowerCase().includes(q));
+  }
+  if (filters.dateFrom) {
+    const from = new Date(filters.dateFrom);
+    from.setHours(0, 0, 0, 0);
+    logs = logs.filter((l) => new Date(l.createdAt) >= from);
+  }
+  if (filters.dateTo) {
+    const to = new Date(filters.dateTo);
+    to.setHours(23, 59, 59, 999);
+    logs = logs.filter((l) => new Date(l.createdAt) <= to);
   }
   return logs;
 }

@@ -95,6 +95,9 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
   const [query, setQuery] = useState("");
   const [logBatchFilter, setLogBatchFilter] = useState("");
   const [logTypeFilter, setLogTypeFilter] = useState<AuditLogType | "all">("all");
+  const [logOperatorFilter, setLogOperatorFilter] = useState("");
+  const [logDateFrom, setLogDateFrom] = useState("");
+  const [logDateTo, setLogDateTo] = useState("");
 
   const batches = selectBatches(state);
   const allAuditLogs = selectAllAuditLogs(state);
@@ -128,17 +131,39 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
       selectFilteredAuditLogs(state, {
         batchNo: logBatchFilter,
         logType: logTypeFilter,
+        operator: logOperatorFilter,
+        dateFrom: logDateFrom,
+        dateTo: logDateTo,
       }),
-    [state, logBatchFilter, logTypeFilter]
+    [state, logBatchFilter, logTypeFilter, logOperatorFilter, logDateFrom, logDateTo]
   );
 
+  const auditLogBase = useMemo(() => {
+    let logs = allAuditLogs;
+    if (logOperatorFilter.trim()) {
+      const q = logOperatorFilter.trim().toLowerCase();
+      logs = logs.filter((l) => l.operator.toLowerCase().includes(q));
+    }
+    if (logDateFrom) {
+      const from = new Date(logDateFrom);
+      from.setHours(0, 0, 0, 0);
+      logs = logs.filter((l) => new Date(l.createdAt) >= from);
+    }
+    if (logDateTo) {
+      const to = new Date(logDateTo);
+      to.setHours(23, 59, 59, 999);
+      logs = logs.filter((l) => new Date(l.createdAt) <= to);
+    }
+    return logs;
+  }, [allAuditLogs, logOperatorFilter, logDateFrom, logDateTo]);
+
   const auditLogTypeCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: allAuditLogs.length };
-    for (const log of allAuditLogs) {
+    const counts: Record<string, number> = { all: auditLogBase.length };
+    for (const log of auditLogBase) {
       counts[log.logType] = (counts[log.logType] ?? 0) + 1;
     }
     return counts;
-  }, [allAuditLogs]);
+  }, [auditLogBase]);
 
   const handleBatchField = (key: keyof typeof emptyBatchForm, value: string) => {
     setBatchForm((prev) => ({ ...prev, [key]: value }));
@@ -324,7 +349,7 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
             <h2>库存变动历史追踪</h2>
           </div>
           <span className="ledger-summary">
-            共 {allAuditLogs.length} 条流水记录
+            共 {auditLogBase.length} 条流水记录
           </span>
         </div>
 
@@ -334,6 +359,22 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
             value={logBatchFilter}
             placeholder="按批号搜索"
             onChange={(e) => setLogBatchFilter(e.target.value)}
+          />
+          <input
+            type="text"
+            value={logOperatorFilter}
+            placeholder="按操作人搜索"
+            onChange={(e) => setLogOperatorFilter(e.target.value)}
+          />
+          <input
+            type="date"
+            value={logDateFrom}
+            onChange={(e) => setLogDateFrom(e.target.value)}
+          />
+          <input
+            type="date"
+            value={logDateTo}
+            onChange={(e) => setLogDateTo(e.target.value)}
           />
           <div className="audit-filter-chips">
             <button
@@ -380,16 +421,19 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
             <div className="empty-icon">📋</div>
             <h3>暂无流水记录</h3>
             <p>
-              {logBatchFilter || logTypeFilter !== "all"
+              {logBatchFilter || logTypeFilter !== "all" || logOperatorFilter || logDateFrom || logDateTo
                 ? "当前筛选条件下没有找到符合的流水记录"
                 : "进行库存操作后会在此处显示流水记录"}
             </p>
-            {(logBatchFilter || logTypeFilter !== "all") && (
+            {(logBatchFilter || logTypeFilter !== "all" || logOperatorFilter || logDateFrom || logDateTo) && (
               <button
                 className="clear-filter"
                 onClick={() => {
                   setLogBatchFilter("");
                   setLogTypeFilter("all");
+                  setLogOperatorFilter("");
+                  setLogDateFrom("");
+                  setLogDateTo("");
                 }}
               >
                 清除筛选条件
