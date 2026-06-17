@@ -152,3 +152,59 @@ export interface NewSafetyStockRuleInput {
 }
 
 export const SAFETY_STOCK_SCHEMA_VERSION = 1;
+
+export type PriorityLevel = "urgent" | "high" | "medium" | "low";
+
+export const PRIORITY_LABELS: Record<PriorityLevel, string> = {
+  urgent: "紧急",
+  high: "高",
+  medium: "中",
+  low: "低",
+};
+
+export const PRIORITY_ORDER: PriorityLevel[] = ["urgent", "high", "medium", "low"];
+
+export const NEAR_EXPIRY_UNSAFE_DAYS = 30;
+
+export const DEFAULT_CONSUMPTION_DAYS = 30;
+
+export const DEFAULT_PURCHASE_COVER_DAYS = 45;
+
+export interface NearExpiryBatchInfo {
+  batchId: string;
+  batchNo: string;
+  expiry: string;
+  daysLeft: number;
+  stock: number;
+}
+
+export interface ProcurementSuggestionItem {
+  name: string;
+  spec: string;
+  origin: string;
+  category: string;
+  unit: string;
+  totalStock: number;
+  safeAvailableStock: number;
+  nearExpiryStock: number;
+  nearExpiryBatches: NearExpiryBatchInfo[];
+  thresholdGrams: number;
+  avgDailyConsumption: number;
+  consumptionDays: number;
+  suggestedPurchaseQty: number;
+  priority: PriorityLevel;
+  priorityScore: number;
+  stockDaysLeft: number;
+  batchCount: number;
+  batches: BatchLedgerDTO[];
+}
+
+export interface CategoryProcurementSummary {
+  category: string;
+  herbCount: number;
+  totalSuggestedQty: number;
+  urgentCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+}
