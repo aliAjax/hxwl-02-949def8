@@ -67,6 +67,8 @@ export interface OperationResult {
 
 export type ExpiryStatus = "expired" | "near" | "ok";
 
+export type AlertLevel = "normal" | "warning60" | "warning30" | "expired";
+
 export const OPERATION_LABELS: Record<OperationType, string> = {
   inbound: "入库",
   outbound: "出库",
@@ -80,6 +82,7 @@ export const OPERATION_SIGNS: Record<OperationType, string> = {
 };
 
 export const NEAR_EXPIRY_DAYS = 60;
+export const WARNING_EXPIRY_DAYS_30 = 30;
 export const LOW_STOCK_GRAMS = 1200;
 
 export const CATEGORIES = ["补气", "清热", "活血", "化湿"];

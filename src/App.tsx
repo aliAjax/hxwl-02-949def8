@@ -1,6 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import "./styles.css";
 import LedgerModule from "./ledger/LedgerModule";
+import ExpiryAlertModule from "./ledger/ExpiryAlertModule";
+import {
+  createSeedState,
+  countBatchesByAlertLevel,
+  selectLowStockBatches,
+  selectAllBatches,
+} from "./ledger/store";
 
 interface InventoryRecord {
   name: string;
@@ -161,16 +168,28 @@ function MetricCard({ label, value, index }: { label: string; value: string; ind
 }
 
 function App() {
-  const values = project.metrics.map((metric: string, index: number) => {
-    const base = [84, 12, 31, 7][index % 4];
-    return String(base + index * 3);
-  });
+  const seedState = useMemo(() => createSeedState(), []);
+
+  const alertCounts = useMemo(() => countBatchesByAlertLevel(seedState), [seedState]);
+  const lowStockBatches = useMemo(() => selectLowStockBatches(seedState), [seedState]);
+  const allBatches = useMemo(() => selectAllBatches(seedState), [seedState]);
+
+  const nearExpiryCount = alertCounts.warning60 + alertCounts.warning30 + alertCounts.expired;
+  const lowStockCount = lowStockBatches.length;
+  const totalBatchCount = allBatches.length;
+
+  const metricValues = [
+    String(nearExpiryCount),
+    String(lowStockCount),
+    "31",
+    "7",
+  ];
 
   const [formData, setFormData] = useState<Record<string, string>>({ ...emptyForm });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [records, setRecords] = useState<InventoryRecord[]>([...project.initialRecords]);
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [tab, setTab] = useState<"entry" | "ledger">("entry");
+  const [tab, setTab] = useState<"entry" | "ledger" | "alert">("entry");
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -282,15 +301,23 @@ function App() {
         >
           批号库存台账
         </button>
+        <button
+          className={tab === "alert" ? "tab tab-active" : "tab"}
+          onClick={() => setTab("alert")}
+        >
+          近效期预警中心
+        </button>
       </nav>
 
       {tab === "ledger" ? (
         <LedgerModule />
+      ) : tab === "alert" ? (
+        <ExpiryAlertModule />
       ) : (
         <>
       <section className="metrics-grid">
         {project.metrics.map((metric: string, index: number) => (
-          <MetricCard key={metric} label={metric} value={values[index]} index={index} />
+          <MetricCard key={metric} label={metric} value={metricValues[index]} index={index} />
         ))}
       </section>
 

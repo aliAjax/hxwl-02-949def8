@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import {
+  AlertLevel,
   BaseEntity,
   BatchLedgerDTO,
   ExpiryStatus,
@@ -13,6 +14,7 @@ import {
   OperationType,
   SCHEMA_VERSION,
   SyncStatus,
+  WARNING_EXPIRY_DAYS_30,
 } from "./types";
 
 export function createId(prefix: string): string {
@@ -244,6 +246,14 @@ export function selectExpiryStatus(expiry: string): ExpiryStatus {
   return "ok";
 }
 
+export function selectAlertLevel(expiry: string): AlertLevel {
+  const diff = daysUntilExpiry(expiry);
+  if (diff <= 0) return "expired";
+  if (diff <= WARNING_EXPIRY_DAYS_30) return "warning30";
+  if (diff <= NEAR_EXPIRY_DAYS) return "warning60";
+  return "normal";
+}
+
 export function daysUntilExpiry(expiry: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -251,6 +261,39 @@ export function daysUntilExpiry(expiry: string): number {
   return Math.ceil(
     (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
   );
+}
+
+export function selectBatchesByAlertLevel(
+  state: LedgerState
+): Record<AlertLevel, BatchLedgerDTO[]> {
+  const result: Record<AlertLevel, BatchLedgerDTO[]> = {
+    normal: [],
+    warning60: [],
+    warning30: [],
+    expired: [],
+  };
+  for (const batch of selectAllBatches(state)) {
+    const level = selectAlertLevel(batch.expiry);
+    result[level].push(batch);
+  }
+  return result;
+}
+
+export function countBatchesByAlertLevel(
+  state: LedgerState
+): Record<AlertLevel, number> {
+  const grouped = selectBatchesByAlertLevel(state);
+  return {
+    normal: grouped.normal.length,
+    warning60: grouped.warning60.length,
+    warning30: grouped.warning30.length,
+    expired: grouped.expired.length,
+  };
+}
+
+export function selectNearExpiryCount(state: LedgerState): number {
+  const counts = countBatchesByAlertLevel(state);
+  return counts.warning60 + counts.warning30 + counts.expired;
 }
 
 export function isLowStock(stock: number): boolean {
