@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CATEGORIES,
   NEAR_EXPIRY_DAYS,
   OPERATION_LABELS,
   OPERATION_SIGNS,
   OperationType,
+  type RolePreferenceRecord,
 } from "./types";
 import {
   countBatchesByAlertLevel,
@@ -20,7 +21,6 @@ import {
   type LowStockHerbItem,
 } from "./store";
 import type { LedgerStore, SafetyStockStore } from "./store";
-import type { RolePreferenceRecord } from "./db/repositories";
 
 type RoleType = "pharmacist" | "warehouse" | "manager";
 
@@ -65,7 +65,6 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
     selectRolePreference,
     selectCurrentRoleOrDefault,
     addRecentSearch,
-    rolePreferences,
   } = inventoryStore;
 
   const [currentRole, setCurrentRoleState] = useState<RoleType>(
@@ -457,7 +456,7 @@ function PharmacistView({
             rolePreference.recentSearches.length > 0 && (
               <div className="recent-searches">
                 <span className="recent-label">最近搜索：</span>
-                {rolePreference.recentSearches.map((s, i) => (
+                {rolePreference.recentSearches.map((s: string, i: number) => (
                   <button
                     key={`${s}-${i}`}
                     className="recent-chip"

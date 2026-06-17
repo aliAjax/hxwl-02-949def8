@@ -232,7 +232,7 @@ export class InventoryDatabase {
     return result;
   }
 
-  async put<T extends { id?: string; key?: string }>(
+  async put<T>(
     storeName: StoreName,
     value: T,
     notify = true
@@ -244,7 +244,7 @@ export class InventoryDatabase {
     return value;
   }
 
-  async putBulk<T extends { id?: string; key?: string }>(
+  async putBulk<T>(
     storeName: StoreName,
     values: T[],
     notify = true

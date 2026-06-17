@@ -6,7 +6,6 @@ import SafetyStockModule from "./ledger/SafetyStockModule";
 import LowStockModule from "./ledger/LowStockModule";
 import RoleWorkspaceModule from "./ledger/RoleWorkspaceModule";
 import {
-  BatchLedgerDTO,
   checkBatchNoExists,
   selectAllBatches,
   selectAllSafetyStockRules,
@@ -16,7 +15,7 @@ import {
   useLedgerStore,
   useSafetyStockStore,
 } from "./ledger/store";
-import { LOW_STOCK_GRAMS, NEAR_EXPIRY_DAYS } from "./ledger/types";
+import { LOW_STOCK_GRAMS, NEAR_EXPIRY_DAYS, type BatchLedgerDTO } from "./ledger/types";
 import { InventoryService } from "./ledger/db/inventoryService";
 
 interface InventoryRecord {
@@ -252,11 +251,11 @@ function App() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate()) return;
 
     try {
-      addBatch({
+      const batchId = await addBatch({
         name: formData.name.trim(),
         spec: formData.spec.trim(),
         origin: formData.origin.trim(),
@@ -268,6 +267,10 @@ function App() {
         operator: formData.operator.trim() || "录入员",
         remark: formData.remark.trim() || "库存录入看板新增",
       });
+      if (!batchId) {
+        setErrors({ submit: "录入失败，请稍后重试" });
+        return;
+      }
 
       setFormData({ ...emptyForm });
       setErrors({});

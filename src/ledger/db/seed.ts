@@ -16,7 +16,7 @@ interface SeedMovement {
 }
 
 function buildBatchWithMovements(
-  base: Omit<BatchRecord, "updatedAt" | "isDeleted" | "syncStatus" | "serverId">,
+  base: Omit<BatchRecord, "herbId" | "updatedAt" | "isDeleted" | "syncStatus" | "serverId">,
   movements: SeedMovement[]
 ): {
   batch: BatchRecord;
@@ -347,7 +347,8 @@ export function buildSeedData(): {
   const rolePreferences: RolePreferenceRecord[] = [
     {
       role: "pharmacist",
-      defaultTab: "workspace",
+      displayName: "药师",
+      defaultTab: true,
       preferredFilters: [],
       recentSearches: [],
       createdAt: now,
@@ -355,7 +356,8 @@ export function buildSeedData(): {
     },
     {
       role: "warehouse",
-      defaultTab: "workspace",
+      displayName: "库管",
+      defaultTab: false,
       preferredFilters: [],
       recentSearches: [],
       createdAt: now,
@@ -363,7 +365,8 @@ export function buildSeedData(): {
     },
     {
       role: "manager",
-      defaultTab: "workspace",
+      displayName: "门店负责人",
+      defaultTab: false,
       preferredFilters: [],
       recentSearches: [],
       createdAt: now,

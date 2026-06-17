@@ -177,7 +177,7 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
     return Object.keys(next).length === 0;
   };
 
-  const submitBatch = () => {
+  const submitBatch = async () => {
     if (!validateBatchForm()) return;
     const input: NewBatchInput = {
       name: batchForm.name.trim(),
@@ -191,7 +191,11 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
       operator: batchForm.operator.trim(),
       remark: batchForm.remark.trim(),
     };
-    addBatch(input);
+    const batchId = await addBatch(input);
+    if (!batchId) {
+      setBatchErrors({ submit: "批号写入失败，请稍后重试" });
+      return;
+    }
     setBatchForm({ ...emptyBatchForm });
     setBatchErrors({});
     setShowForm(false);

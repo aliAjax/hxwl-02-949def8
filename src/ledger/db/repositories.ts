@@ -1,4 +1,4 @@
-import { inventoryDB, type DatabaseError, type ConstraintError } from "./database";
+import { ConstraintError, DatabaseError, inventoryDB } from "./database";
 import {
   STORES,
   fillAuditLogDefaults,

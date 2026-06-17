@@ -645,7 +645,7 @@ export function createSeedState(): LedgerState {
 
 export interface LedgerStore {
   state: LedgerState;
-  addBatch: (input: NewBatchInput) => string;
+  addBatch: (input: NewBatchInput) => Promise<string | null>;
   recordOperation: (input: NewOperationInput) => OperationResult;
   recordSafetyStockChange: (params: {
     herbName: string;
@@ -679,18 +679,14 @@ export function useLedgerStore(
   }, [state]);
 
   const addBatch = useCallback(
-    (input: NewBatchInput): string => {
-      const optimisticResult = createBatch(optimisticState, input);
-      setOptimisticState(optimisticResult.state);
-      void (async () => {
-        const result = await asyncAddBatch(input);
-        if (result === null) {
-          setOptimisticState(lastDbStateRef.current);
-        }
-      })();
-      return optimisticResult.batchId;
+    async (input: NewBatchInput): Promise<string | null> => {
+      const result = await asyncAddBatch(input);
+      if (result === null) {
+        setOptimisticState(lastDbStateRef.current);
+      }
+      return result;
     },
-    [optimisticState, asyncAddBatch]
+    [asyncAddBatch]
   );
 
   const recordOperation = useCallback(

@@ -25,6 +25,18 @@ export interface BatchLedgerDTO extends BaseEntity {
   unit: string;
 }
 
+export interface RolePreferenceRecord {
+  role: "pharmacist" | "warehouse" | "manager";
+  displayName?: string;
+  defaultTab?: boolean;
+  preferredFilters?: string[];
+  selectedCategory?: string;
+  dashboardLayout?: string;
+  recentSearches?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LedgerOperationDTO extends BaseEntity {
   batchId: string;
   type: OperationType;

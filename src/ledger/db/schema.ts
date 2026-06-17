@@ -95,7 +95,8 @@ export interface SafetyStockRuleRecord {
 
 export interface RolePreferenceRecord {
   role: "pharmacist" | "warehouse" | "manager";
-  defaultTab?: string;
+  displayName?: string;
+  defaultTab?: boolean;
   preferredFilters?: string[];
   selectedCategory?: string;
   dashboardLayout?: string;
@@ -180,6 +181,7 @@ export const DEFAULT_SAFETY_STOCK_RULE: Omit<SafetyStockRuleRecord, never> = {
 
 export const DEFAULT_ROLE_PREFERENCE: Omit<RolePreferenceRecord, never> = {
   role: "pharmacist",
+  defaultTab: false,
   createdAt: "",
   updatedAt: "",
 };
@@ -242,6 +244,9 @@ export function fillRolePreferenceDefaults(
   return {
     ...DEFAULT_ROLE_PREFERENCE,
     ...raw,
+    defaultTab: raw.defaultTab ?? false,
+    recentSearches: raw.recentSearches ?? [],
+    preferredFilters: raw.preferredFilters ?? [],
   } as RolePreferenceRecord;
 }
 
