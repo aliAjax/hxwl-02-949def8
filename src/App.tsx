@@ -3,6 +3,7 @@ import "./styles.css";
 import LedgerModule from "./ledger/LedgerModule";
 import ExpiryAlertModule from "./ledger/ExpiryAlertModule";
 import SafetyStockModule from "./ledger/SafetyStockModule";
+import LowStockModule from "./ledger/LowStockModule";
 import {
   createSeedState,
   createSeedSafetyStockState,
@@ -199,7 +200,7 @@ function App() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [records, setRecords] = useState<InventoryRecord[]>([...project.initialRecords]);
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety">("entry");
+  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock">("entry");
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -318,6 +319,12 @@ function App() {
           近效期预警中心
         </button>
         <button
+          className={tab === "lowstock" ? "tab tab-active" : "tab"}
+          onClick={() => setTab("lowstock")}
+        >
+          低库存清单
+        </button>
+        <button
           className={tab === "safety" ? "tab tab-active" : "tab"}
           onClick={() => setTab("safety")}
         >
@@ -329,6 +336,11 @@ function App() {
         <LedgerModule store={ledgerStore} safetyStockState={safetyStockState} />
       ) : tab === "alert" ? (
         <ExpiryAlertModule store={ledgerStore} />
+      ) : tab === "lowstock" ? (
+        <LowStockModule
+          ledgerStore={ledgerStore}
+          safetyStockStore={safetyStockStore}
+        />
       ) : tab === "safety" ? (
         <SafetyStockModule
           safetyStockStore={safetyStockStore}

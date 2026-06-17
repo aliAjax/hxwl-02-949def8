@@ -619,6 +619,63 @@ export function selectLowStockHerbCountWithRules(
   return herbNames.size;
 }
 
+export interface LowStockHerbItem {
+  name: string;
+  category: string;
+  totalStock: number;
+  unit: string;
+  thresholdGrams: number;
+  shortageGrams: number;
+  batchCount: number;
+  batches: BatchLedgerDTO[];
+}
+
+export function selectLowStockHerbList(
+  ledgerState: LedgerState,
+  safetyStockState: SafetyStockState
+): LowStockHerbItem[] {
+  const lowStockBatches = selectLowStockBatchesWithRules(ledgerState, safetyStockState);
+
+  const map = new Map<string, LowStockHerbItem>();
+
+  for (const batch of lowStockBatches) {
+    const stock = selectCurrentStock(ledgerState, batch.id);
+    const existing = map.get(batch.name);
+
+    if (existing) {
+      existing.totalStock += stock;
+      existing.batchCount += 1;
+      existing.batches.push(batch);
+    } else {
+      const threshold = selectSafetyStockThresholdForHerb(
+        safetyStockState,
+        batch.name,
+        batch.category
+      );
+      map.set(batch.name, {
+        name: batch.name,
+        category: batch.category,
+        totalStock: stock,
+        unit: batch.unit,
+        thresholdGrams: threshold,
+        shortageGrams: threshold - stock,
+        batchCount: 1,
+        batches: [batch],
+      });
+    }
+  }
+
+  const list = Array.from(map.values());
+
+  for (const item of list) {
+    item.shortageGrams = item.thresholdGrams - item.totalStock;
+  }
+
+  list.sort((a, b) => b.shortageGrams - a.shortageGrams);
+
+  return list;
+}
+
 export function createSafetyStockRule(
   state: SafetyStockState,
   input: NewSafetyStockRuleInput
