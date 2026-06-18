@@ -5,6 +5,7 @@ import ExpiryAlertModule from "./ledger/ExpiryAlertModule";
 import SafetyStockModule from "./ledger/SafetyStockModule";
 import LowStockModule from "./ledger/LowStockModule";
 import ProcurementSuggestionModule from "./ledger/ProcurementSuggestionModule";
+import RestockSuggestionPage from "./ledger/RestockSuggestionPage";
 import RoleWorkspaceModule from "./ledger/RoleWorkspaceModule";
 import {
   checkBatchNoExists,
@@ -184,7 +185,7 @@ function App() {
   const [formData, setFormData] = useState<Record<string, string>>({ ...emptyForm });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock" | "procurement" | "workspace">("workspace");
+  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock" | "procurement" | "restock" | "workspace">("workspace");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const records = useMemo<InventoryRecord[]>(() => {
@@ -419,6 +420,12 @@ function App() {
           采购补货建议
         </button>
         <button
+          className={tab === "restock" ? "tab tab-active" : "tab"}
+          onClick={() => setTab("restock")}
+        >
+          补货建议
+        </button>
+        <button
           className={tab === "entry" ? "tab tab-active" : "tab"}
           onClick={() => setTab("entry")}
         >
@@ -457,6 +464,11 @@ function App() {
         />
       ) : tab === "procurement" ? (
         <ProcurementSuggestionModule
+          ledgerStore={ledgerStore}
+          safetyStockStore={safetyStockStore}
+        />
+      ) : tab === "restock" ? (
+        <RestockSuggestionPage
           ledgerStore={ledgerStore}
           safetyStockStore={safetyStockStore}
         />
