@@ -92,10 +92,62 @@ export function markPendingSynced(
   const pendingBatchIds = Object.keys(state.batches).filter(
     (id) => !state.batches[id].isDeleted && state.batches[id].syncStatus === "pending"
   );
-  return updateBatchSyncStatus(state, pendingBatchIds, "synced", {
-    assignServerId: true,
-    timestamp,
+
+  const batches: Record<string, typeof state.batches[string]> = {};
+  for (const id of Object.keys(state.batches)) {
+    const b = state.batches[id];
+    if (pendingBatchIds.includes(id)) {
+      batches[id] = {
+        ...b,
+        syncStatus: "synced" as SyncStatus,
+        serverId: b.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    } else {
+      batches[id] = b;
+    }
+  }
+
+  const operations = state.operations.map((op) => {
+    if (!op.isDeleted && op.syncStatus === "pending") {
+      return {
+        ...op,
+        syncStatus: "synced" as SyncStatus,
+        serverId: op.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    }
+    return op;
   });
+
+  const auditLogs = state.auditLogs.map((log) => {
+    if (!log.isDeleted && log.syncStatus === "pending") {
+      return {
+        ...log,
+        syncStatus: "synced" as SyncStatus,
+        serverId: log.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    }
+    return log;
+  });
+
+  const hasPendingBatches = pendingBatchIds.length > 0;
+  const hasPendingOps = state.operations.some(
+    (op) => !op.isDeleted && op.syncStatus === "pending"
+  );
+  const hasPendingLogs = state.auditLogs.some(
+    (log) => !log.isDeleted && log.syncStatus === "pending"
+  );
+  const hasPending = hasPendingBatches || hasPendingOps || hasPendingLogs;
+
+  return {
+    ...state,
+    batches,
+    operations,
+    auditLogs,
+    lastSyncedAt: hasPending ? timestamp : state.lastSyncedAt,
+  };
 }
 
 export function resolveConflictWithLocal(
