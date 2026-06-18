@@ -206,15 +206,109 @@ export class BatchRepository {
   }
 
   static async markSynced(id: string): Promise<WriteResult<BatchRecord>> {
-    return this.upsert({ id, syncStatus: "synced" });
+    return this.upsert({ id, syncStatus: "synced", serverId: createId("srv") });
+  }
+
+  static async markConflict(id: string): Promise<WriteResult<BatchRecord>> {
+    return this.upsert({ id, syncStatus: "conflict" });
+  }
+
+  static async markPending(id: string): Promise<WriteResult<BatchRecord>> {
+    return this.upsert({ id, syncStatus: "pending" });
   }
 
   static async markAllSynced(): Promise<WriteResult<void>> {
     const all = await this.getAll();
     const now = nowIso();
     const updated = all.map((b) =>
-      fillBatchDefaults({ ...b, syncStatus: "synced", updatedAt: now })
+      fillBatchDefaults({
+        ...b,
+        syncStatus: "synced",
+        serverId: b.serverId ?? createId("srv"),
+        updatedAt: now,
+      })
     );
+    try {
+      await inventoryDB.putBulk(STORES.BATCHES, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async markBatchesConflict(ids: string[]): Promise<WriteResult<void>> {
+    if (ids.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const idSet = new Set(ids);
+    const updated = all
+      .filter((b) => idSet.has(b.id))
+      .map((b) =>
+        fillBatchDefaults({ ...b, syncStatus: "conflict", updatedAt: now })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.BATCHES, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveBatchesConflictLocal(ids: string[]): Promise<WriteResult<void>> {
+    if (ids.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const idSet = new Set(ids);
+    const updated = all
+      .filter((b) => idSet.has(b.id) && b.syncStatus === "conflict")
+      .map((b) =>
+        fillBatchDefaults({
+          ...b,
+          syncStatus: "synced",
+          serverId: b.serverId ?? createId("srv"),
+          updatedAt: now,
+        })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.BATCHES, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveBatchesConflictServer(ids: string[]): Promise<WriteResult<void>> {
+    if (ids.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const idSet = new Set(ids);
+    const updated = all
+      .filter((b) => idSet.has(b.id) && b.syncStatus === "conflict")
+      .map((b) =>
+        fillBatchDefaults({ ...b, syncStatus: "synced", updatedAt: now })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.BATCHES, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveBatchesConflictLater(ids: string[]): Promise<WriteResult<void>> {
+    if (ids.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const idSet = new Set(ids);
+    const updated = all
+      .filter((b) => idSet.has(b.id) && b.syncStatus === "conflict")
+      .map((b) =>
+        fillBatchDefaults({ ...b, syncStatus: "pending", updatedAt: now })
+      );
     try {
       await inventoryDB.putBulk(STORES.BATCHES, updated);
       return { ok: true };
@@ -325,8 +419,94 @@ export class OperationRepository {
     const all = await this.getAll();
     const now = nowIso();
     const updated = all.map((o) =>
-      fillOperationDefaults({ ...o, syncStatus: "synced", updatedAt: now })
+      fillOperationDefaults({
+        ...o,
+        syncStatus: "synced",
+        serverId: o.serverId ?? createId("srv"),
+        updatedAt: now,
+      })
     );
+    try {
+      await inventoryDB.putBulk(STORES.OPERATIONS, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async markOperationsConflictByBatchIds(batchIds: string[]): Promise<WriteResult<void>> {
+    if (batchIds.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const idSet = new Set(batchIds);
+    const updated = all
+      .filter((o) => idSet.has(o.batchId))
+      .map((o) =>
+        fillOperationDefaults({ ...o, syncStatus: "conflict", updatedAt: now })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.OPERATIONS, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveOperationsConflictLocal(batchIds: string[]): Promise<WriteResult<void>> {
+    if (batchIds.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const idSet = new Set(batchIds);
+    const updated = all
+      .filter((o) => idSet.has(o.batchId) && o.syncStatus === "conflict")
+      .map((o) =>
+        fillOperationDefaults({
+          ...o,
+          syncStatus: "synced",
+          serverId: o.serverId ?? createId("srv"),
+          updatedAt: now,
+        })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.OPERATIONS, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveOperationsConflictServer(batchIds: string[]): Promise<WriteResult<void>> {
+    if (batchIds.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const idSet = new Set(batchIds);
+    const updated = all
+      .filter((o) => idSet.has(o.batchId) && o.syncStatus === "conflict")
+      .map((o) =>
+        fillOperationDefaults({ ...o, syncStatus: "synced", updatedAt: now })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.OPERATIONS, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveOperationsConflictLater(batchIds: string[]): Promise<WriteResult<void>> {
+    if (batchIds.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const idSet = new Set(batchIds);
+    const updated = all
+      .filter((o) => idSet.has(o.batchId) && o.syncStatus === "conflict")
+      .map((o) =>
+        fillOperationDefaults({ ...o, syncStatus: "pending", updatedAt: now })
+      );
     try {
       await inventoryDB.putBulk(STORES.OPERATIONS, updated);
       return { ok: true };
@@ -440,8 +620,94 @@ export class AuditLogRepository {
     const all = await this.getAll();
     const now = nowIso();
     const updated = all.map((l) =>
-      fillAuditLogDefaults({ ...l, syncStatus: "synced", updatedAt: now })
+      fillAuditLogDefaults({
+        ...l,
+        syncStatus: "synced",
+        serverId: l.serverId ?? createId("srv"),
+        updatedAt: now,
+      })
     );
+    try {
+      await inventoryDB.putBulk(STORES.AUDIT_LOGS, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async markAuditLogsConflictByBatchNos(batchNos: string[]): Promise<WriteResult<void>> {
+    if (batchNos.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const noSet = new Set(batchNos);
+    const updated = all
+      .filter((l) => noSet.has(l.batchNo))
+      .map((l) =>
+        fillAuditLogDefaults({ ...l, syncStatus: "conflict", updatedAt: now })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.AUDIT_LOGS, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveAuditLogsConflictLocal(batchNos: string[]): Promise<WriteResult<void>> {
+    if (batchNos.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const noSet = new Set(batchNos);
+    const updated = all
+      .filter((l) => noSet.has(l.batchNo) && l.syncStatus === "conflict")
+      .map((l) =>
+        fillAuditLogDefaults({
+          ...l,
+          syncStatus: "synced",
+          serverId: l.serverId ?? createId("srv"),
+          updatedAt: now,
+        })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.AUDIT_LOGS, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveAuditLogsConflictServer(batchNos: string[]): Promise<WriteResult<void>> {
+    if (batchNos.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const noSet = new Set(batchNos);
+    const updated = all
+      .filter((l) => noSet.has(l.batchNo) && l.syncStatus === "conflict")
+      .map((l) =>
+        fillAuditLogDefaults({ ...l, syncStatus: "synced", updatedAt: now })
+      );
+    try {
+      await inventoryDB.putBulk(STORES.AUDIT_LOGS, updated);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async resolveAuditLogsConflictLater(batchNos: string[]): Promise<WriteResult<void>> {
+    if (batchNos.length === 0) return { ok: true };
+    const all = await this.getAll();
+    const now = nowIso();
+    const noSet = new Set(batchNos);
+    const updated = all
+      .filter((l) => noSet.has(l.batchNo) && l.syncStatus === "conflict")
+      .map((l) =>
+        fillAuditLogDefaults({ ...l, syncStatus: "pending", updatedAt: now })
+      );
     try {
       await inventoryDB.putBulk(STORES.AUDIT_LOGS, updated);
       return { ok: true };

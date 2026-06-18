@@ -771,6 +771,7 @@ export class InventoryService {
       OperationRepository.markAllSynced(),
       AuditLogRepository.markAllSynced(),
     ]);
+    await inventoryDB.setMeta("lastSyncedAt", nowIso());
   }
 
   static async countPendingSync(): Promise<number> {
@@ -789,6 +790,480 @@ export class InventoryService {
       (l) => !l.isDeleted && l.syncStatus !== "synced"
     ).length;
     return pendingBatches + pendingOps + pendingLogs;
+  }
+
+  static async getSyncStats(): Promise<{
+    pendingBatches: number;
+    pendingOperations: number;
+    pendingAuditLogs: number;
+    conflictBatches: number;
+    conflictOperations: number;
+    conflictAuditLogs: number;
+    syncedBatches: number;
+    syncedOperations: number;
+    syncedAuditLogs: number;
+    lastSyncedAt?: string;
+  }> {
+    const [batches, operations, auditLogs, lastSyncedAt] = await Promise.all([
+      BatchRepository.getAll(),
+      OperationRepository.getAll(),
+      AuditLogRepository.getAll(),
+      inventoryDB.getMeta("lastSyncedAt") as Promise<string | undefined>,
+    ]);
+
+    const filterStatus = (items: { syncStatus: string; isDeleted: boolean }[], status: string) =>
+      items.filter((i) => !i.isDeleted && i.syncStatus === status).length;
+
+    return {
+      pendingBatches: filterStatus(batches, "pending"),
+      pendingOperations: filterStatus(operations, "pending"),
+      pendingAuditLogs: filterStatus(auditLogs, "pending"),
+      conflictBatches: filterStatus(batches, "conflict"),
+      conflictOperations: filterStatus(operations, "conflict"),
+      conflictAuditLogs: filterStatus(auditLogs, "conflict"),
+      syncedBatches: filterStatus(batches, "synced"),
+      syncedOperations: filterStatus(operations, "synced"),
+      syncedAuditLogs: filterStatus(auditLogs, "synced"),
+      lastSyncedAt,
+    };
+  }
+
+  static async performSync(options?: {
+    simulateConflict?: boolean;
+    conflictRatio?: number;
+  }): Promise<{
+    ok: boolean;
+    syncedCount: number;
+    conflictCount: number;
+    conflictBatchIds: string[];
+  }> {
+    const simulateConflict = options?.simulateConflict ?? false;
+    const conflictRatio = options?.conflictRatio ?? 0.3;
+
+    const pendingBatches = (await BatchRepository.getAll()).filter(
+      (b) => !b.isDeleted && b.syncStatus === "pending"
+    );
+
+    if (pendingBatches.length === 0) {
+      return { ok: true, syncedCount: 0, conflictCount: 0, conflictBatchIds: [] };
+    }
+
+    let conflictBatchIds: string[] = [];
+    let syncedBatchIds: string[] = [];
+
+    if (simulateConflict) {
+      const shuffled = [...pendingBatches].sort(() => Math.random() - 0.5);
+      const conflictCount = Math.max(
+        1,
+        Math.min(
+          pendingBatches.length,
+          Math.floor(pendingBatches.length * conflictRatio)
+        )
+      );
+      conflictBatchIds = shuffled.slice(0, conflictCount).map((b) => b.id);
+      syncedBatchIds = shuffled
+        .slice(conflictCount)
+        .map((b) => b.id);
+    } else {
+      syncedBatchIds = pendingBatches.map((b) => b.id);
+    }
+
+    try {
+      if (syncedBatchIds.length > 0) {
+        const syncedBatchNos = (await BatchRepository.getAll())
+          .filter((b) => syncedBatchIds.includes(b.id))
+          .map((b) => b.batchNo);
+
+        await inventoryDB.withTransaction(
+          [STORES.BATCHES, STORES.OPERATIONS, STORES.AUDIT_LOGS, STORES.META],
+          "readwrite",
+          (stores) => {
+            const now = nowIso();
+            stores[STORES.BATCHES].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<BatchRecord>;
+                if (syncedBatchIds.includes(v.id ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    serverId: v.serverId ?? createId("srv"),
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.OPERATIONS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<OperationRecord>;
+                if (syncedBatchIds.includes(v.batchId ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    serverId: v.serverId ?? createId("srv"),
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.AUDIT_LOGS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<AuditLogRecord>;
+                if (syncedBatchNos.includes(v.batchNo ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    serverId: v.serverId ?? createId("srv"),
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.META].put({
+              key: "lastSyncedAt",
+              value: now,
+              updatedAt: now,
+            });
+          }
+        );
+      }
+
+      if (conflictBatchIds.length > 0) {
+        const conflictBatchNos = (await BatchRepository.getAll())
+          .filter((b) => conflictBatchIds.includes(b.id))
+          .map((b) => b.batchNo);
+
+        await inventoryDB.withTransaction(
+          [STORES.BATCHES, STORES.OPERATIONS, STORES.AUDIT_LOGS],
+          "readwrite",
+          (stores) => {
+            const now = nowIso();
+            stores[STORES.BATCHES].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<BatchRecord>;
+                if (conflictBatchIds.includes(v.id ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "conflict",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.OPERATIONS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<OperationRecord>;
+                if (conflictBatchIds.includes(v.batchId ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "conflict",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.AUDIT_LOGS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<AuditLogRecord>;
+                if (conflictBatchNos.includes(v.batchNo ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "conflict",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+          }
+        );
+      }
+
+      return {
+        ok: true,
+        syncedCount: syncedBatchIds.length,
+        conflictCount: conflictBatchIds.length,
+        conflictBatchIds,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "同步失败";
+      return { ok: false, syncedCount: 0, conflictCount: 0, conflictBatchIds: [] };
+    }
+  }
+
+  static async resolveConflict(
+    batchIds: string[],
+    strategy: "local_overwrite" | "keep_server" | "handle_later"
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (batchIds.length === 0) return { ok: true };
+
+    const batches = await BatchRepository.getAll();
+    const conflictBatchIds = batches
+      .filter((b) => batchIds.includes(b.id) && b.syncStatus === "conflict")
+      .map((b) => b.id);
+    const conflictBatchNos = batches
+      .filter((b) => conflictBatchIds.includes(b.id))
+      .map((b) => b.batchNo);
+
+    if (conflictBatchIds.length === 0) {
+      return { ok: false, error: "未找到冲突的批号" };
+    }
+
+    try {
+      if (strategy === "local_overwrite") {
+        await inventoryDB.withTransaction(
+          [STORES.BATCHES, STORES.OPERATIONS, STORES.AUDIT_LOGS, STORES.META],
+          "readwrite",
+          (stores) => {
+            const now = nowIso();
+            stores[STORES.BATCHES].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<BatchRecord>;
+                if (conflictBatchIds.includes(v.id ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    serverId: v.serverId ?? createId("srv"),
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.OPERATIONS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<OperationRecord>;
+                if (conflictBatchIds.includes(v.batchId ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    serverId: v.serverId ?? createId("srv"),
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.AUDIT_LOGS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<AuditLogRecord>;
+                if (conflictBatchNos.includes(v.batchNo ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    serverId: v.serverId ?? createId("srv"),
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.META].put({
+              key: "lastSyncedAt",
+              value: now,
+              updatedAt: now,
+            });
+          }
+        );
+      } else if (strategy === "keep_server") {
+        await inventoryDB.withTransaction(
+          [STORES.BATCHES, STORES.OPERATIONS, STORES.AUDIT_LOGS, STORES.META],
+          "readwrite",
+          (stores) => {
+            const now = nowIso();
+            stores[STORES.BATCHES].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<BatchRecord>;
+                if (conflictBatchIds.includes(v.id ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.OPERATIONS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<OperationRecord>;
+                if (conflictBatchIds.includes(v.batchId ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.AUDIT_LOGS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<AuditLogRecord>;
+                if (conflictBatchNos.includes(v.batchNo ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "synced",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.META].put({
+              key: "lastSyncedAt",
+              value: now,
+              updatedAt: now,
+            });
+          }
+        );
+      } else {
+        await inventoryDB.withTransaction(
+          [STORES.BATCHES, STORES.OPERATIONS, STORES.AUDIT_LOGS],
+          "readwrite",
+          (stores) => {
+            const now = nowIso();
+            stores[STORES.BATCHES].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<BatchRecord>;
+                if (conflictBatchIds.includes(v.id ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "pending",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.OPERATIONS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<OperationRecord>;
+                if (conflictBatchIds.includes(v.batchId ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "pending",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+
+            stores[STORES.AUDIT_LOGS].openCursor().onsuccess = (event) => {
+              const cursor = (event.target as IDBRequest).result as
+                | IDBCursorWithValue
+                | undefined;
+              if (cursor) {
+                const v = cursor.value as Partial<AuditLogRecord>;
+                if (conflictBatchNos.includes(v.batchNo ?? "")) {
+                  cursor.update({
+                    ...v,
+                    syncStatus: "pending",
+                    updatedAt: now,
+                  });
+                }
+                cursor.continue();
+              }
+            };
+          }
+        );
+      }
+
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "冲突处理失败";
+      return { ok: false, error: msg };
+    }
+  }
+
+  static async getConflictBatchDetails(): Promise<
+    Array<{
+      batch: BatchRecord;
+      operations: OperationRecord[];
+      auditLogs: AuditLogRecord[];
+    }>
+  > {
+    const [batches, operations, auditLogs] = await Promise.all([
+      BatchRepository.getAll(),
+      OperationRepository.getAll(),
+      AuditLogRepository.getAll(),
+    ]);
+
+    const conflictBatches = batches.filter(
+      (b) => !b.isDeleted && b.syncStatus === "conflict"
+    );
+
+    const conflictBatchIdSet = new Set(conflictBatches.map((b) => b.id));
+    const conflictBatchNoSet = new Set(conflictBatches.map((b) => b.batchNo));
+
+    return conflictBatches.map((batch) => ({
+      batch,
+      operations: operations.filter(
+        (o) => conflictBatchIdSet.has(o.batchId) && o.syncStatus === "conflict"
+      ),
+      auditLogs: auditLogs.filter(
+        (l) => conflictBatchNoSet.has(l.batchNo) && l.syncStatus === "conflict"
+      ),
+    }));
   }
 }
 

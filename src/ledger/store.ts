@@ -106,6 +106,110 @@ export function selectPendingSyncCount(state: LedgerState): number {
   return pendingBatches + pendingOps + pendingLogs;
 }
 
+export function selectSyncStats(state: LedgerState): {
+  pendingBatches: number;
+  pendingOperations: number;
+  pendingAuditLogs: number;
+  conflictBatches: number;
+  conflictOperations: number;
+  conflictAuditLogs: number;
+  syncedBatches: number;
+  syncedOperations: number;
+  syncedAuditLogs: number;
+  lastSyncedAt?: string;
+} {
+  const allBatches = Object.values(state.batches).filter((b) => !b.isDeleted);
+  const allOps = state.operations.filter((o) => !o.isDeleted);
+  const allLogs = state.auditLogs.filter((l) => !l.isDeleted);
+
+  return {
+    pendingBatches: allBatches.filter((b) => b.syncStatus === "pending").length,
+    pendingOperations: allOps.filter((o) => o.syncStatus === "pending").length,
+    pendingAuditLogs: allLogs.filter((l) => l.syncStatus === "pending").length,
+    conflictBatches: allBatches.filter((b) => b.syncStatus === "conflict").length,
+    conflictOperations: allOps.filter((o) => o.syncStatus === "conflict").length,
+    conflictAuditLogs: allLogs.filter((l) => l.syncStatus === "conflict").length,
+    syncedBatches: allBatches.filter((b) => b.syncStatus === "synced").length,
+    syncedOperations: allOps.filter((o) => o.syncStatus === "synced").length,
+    syncedAuditLogs: allLogs.filter((l) => l.syncStatus === "synced").length,
+    lastSyncedAt: state.lastSyncedAt,
+  };
+}
+
+export function selectConflictBatches(state: LedgerState): BatchLedgerDTO[] {
+  return Object.values(state.batches).filter(
+    (b) => !b.isDeleted && b.syncStatus === "conflict"
+  );
+}
+
+export function selectConflictOperations(state: LedgerState): LedgerOperationDTO[] {
+  return state.operations.filter(
+    (o) => !o.isDeleted && o.syncStatus === "conflict"
+  );
+}
+
+export function selectConflictAuditLogs(state: LedgerState): InventoryAuditLogDTO[] {
+  return state.auditLogs.filter(
+    (l) => !l.isDeleted && l.syncStatus === "conflict"
+  );
+}
+
+export function selectPendingBatches(state: LedgerState): BatchLedgerDTO[] {
+  return Object.values(state.batches).filter(
+    (b) => !b.isDeleted && b.syncStatus === "pending"
+  );
+}
+
+export function selectPendingOperations(state: LedgerState): LedgerOperationDTO[] {
+  return state.operations.filter(
+    (o) => !o.isDeleted && o.syncStatus === "pending"
+  );
+}
+
+export function selectPendingAuditLogs(state: LedgerState): InventoryAuditLogDTO[] {
+  return state.auditLogs.filter(
+    (l) => !l.isDeleted && l.syncStatus === "pending"
+  );
+}
+
+export function selectSyncedBatches(state: LedgerState): BatchLedgerDTO[] {
+  return Object.values(state.batches).filter(
+    (b) => !b.isDeleted && b.syncStatus === "synced"
+  );
+}
+
+export function selectSyncedOperations(state: LedgerState): LedgerOperationDTO[] {
+  return state.operations.filter(
+    (o) => !o.isDeleted && o.syncStatus === "synced"
+  );
+}
+
+export function selectSyncedAuditLogs(state: LedgerState): InventoryAuditLogDTO[] {
+  return state.auditLogs.filter(
+    (l) => !l.isDeleted && l.syncStatus === "synced"
+  );
+}
+
+export function selectOperationsByBatchId(
+  state: LedgerState,
+  batchId: string
+): LedgerOperationDTO[] {
+  return state.operations.filter(
+    (o) => !o.isDeleted && o.batchId === batchId
+  );
+}
+
+export function selectAuditLogsByBatchId(
+  state: LedgerState,
+  batchId: string
+): InventoryAuditLogDTO[] {
+  const batch = state.batches[batchId];
+  if (!batch) return [];
+  return state.auditLogs.filter(
+    (l) => !l.isDeleted && l.batchNo === batch.batchNo
+  );
+}
+
 export function selectAllAuditLogs(state: LedgerState): InventoryAuditLogDTO[] {
   return state.auditLogs.filter((l) => !l.isDeleted);
 }
@@ -274,17 +378,20 @@ export function markSynced(
     batches[id] = {
       ...state.batches[id],
       syncStatus: "synced" as SyncStatus,
+      serverId: state.batches[id].serverId ?? createId("srv"),
       updatedAt: timestamp,
     };
   }
   const operations = state.operations.map((op) => ({
     ...op,
     syncStatus: "synced" as SyncStatus,
+    serverId: op.serverId ?? createId("srv"),
     updatedAt: timestamp,
   }));
   const auditLogs = state.auditLogs.map((log) => ({
     ...log,
     syncStatus: "synced" as SyncStatus,
+    serverId: log.serverId ?? createId("srv"),
     updatedAt: timestamp,
   }));
   return {
@@ -293,6 +400,279 @@ export function markSynced(
     operations,
     auditLogs,
     lastSyncedAt: timestamp,
+  };
+}
+
+export function markEntitiesConflict(
+  state: LedgerState,
+  batchIds: string[],
+  timestamp: string = nowIso()
+): LedgerState {
+  const batchIdSet = new Set(batchIds);
+  const batches: Record<string, BatchLedgerDTO> = {};
+  for (const id of Object.keys(state.batches)) {
+    if (batchIdSet.has(id)) {
+      batches[id] = {
+        ...state.batches[id],
+        syncStatus: "conflict" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    } else {
+      batches[id] = state.batches[id];
+    }
+  }
+
+  const operations = state.operations.map((op) => {
+    if (batchIdSet.has(op.batchId)) {
+      return {
+        ...op,
+        syncStatus: "conflict" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    }
+    return op;
+  });
+
+  const conflictBatchNos = new Set(
+    batchIds
+      .map((id) => state.batches[id]?.batchNo)
+      .filter((v): v is string => !!v)
+  );
+  const auditLogs = state.auditLogs.map((log) => {
+    if (conflictBatchNos.has(log.batchNo)) {
+      return {
+        ...log,
+        syncStatus: "conflict" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    }
+    return log;
+  });
+
+  return {
+    ...state,
+    batches,
+    operations,
+    auditLogs,
+  };
+}
+
+export function markPendingSynced(
+  state: LedgerState,
+  timestamp: string = nowIso()
+): LedgerState {
+  const batches: Record<string, BatchLedgerDTO> = {};
+  for (const id of Object.keys(state.batches)) {
+    const b = state.batches[id];
+    if (!b.isDeleted && b.syncStatus === "pending") {
+      batches[id] = {
+        ...b,
+        syncStatus: "synced" as SyncStatus,
+        serverId: b.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    } else {
+      batches[id] = b;
+    }
+  }
+  const operations = state.operations.map((op) => {
+    if (!op.isDeleted && op.syncStatus === "pending") {
+      return {
+        ...op,
+        syncStatus: "synced" as SyncStatus,
+        serverId: op.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    }
+    return op;
+  });
+  const auditLogs = state.auditLogs.map((log) => {
+    if (!log.isDeleted && log.syncStatus === "pending") {
+      return {
+        ...log,
+        syncStatus: "synced" as SyncStatus,
+        serverId: log.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    }
+    return log;
+  });
+  return {
+    ...state,
+    batches,
+    operations,
+    auditLogs,
+    lastSyncedAt: timestamp,
+  };
+}
+
+export function resolveConflictWithLocal(
+  state: LedgerState,
+  batchIds: string[],
+  timestamp: string = nowIso()
+): LedgerState {
+  const batchIdSet = new Set(batchIds);
+  const batches: Record<string, BatchLedgerDTO> = {};
+  for (const id of Object.keys(state.batches)) {
+    const b = state.batches[id];
+    if (batchIdSet.has(id) && b.syncStatus === "conflict") {
+      batches[id] = {
+        ...b,
+        syncStatus: "synced" as SyncStatus,
+        serverId: b.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    } else {
+      batches[id] = b;
+    }
+  }
+
+  const operations = state.operations.map((op) => {
+    if (batchIdSet.has(op.batchId) && op.syncStatus === "conflict") {
+      return {
+        ...op,
+        syncStatus: "synced" as SyncStatus,
+        serverId: op.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    }
+    return op;
+  });
+
+  const conflictBatchNos = new Set(
+    batchIds
+      .map((id) => state.batches[id]?.batchNo)
+      .filter((v): v is string => !!v)
+  );
+  const auditLogs = state.auditLogs.map((log) => {
+    if (conflictBatchNos.has(log.batchNo) && log.syncStatus === "conflict") {
+      return {
+        ...log,
+        syncStatus: "synced" as SyncStatus,
+        serverId: log.serverId ?? createId("srv"),
+        updatedAt: timestamp,
+      };
+    }
+    return log;
+  });
+
+  return {
+    ...state,
+    batches,
+    operations,
+    auditLogs,
+    lastSyncedAt: timestamp,
+  };
+}
+
+export function resolveConflictWithServer(
+  state: LedgerState,
+  batchIds: string[],
+  timestamp: string = nowIso()
+): LedgerState {
+  const batchIdSet = new Set(batchIds);
+  const batches: Record<string, BatchLedgerDTO> = {};
+  for (const id of Object.keys(state.batches)) {
+    const b = state.batches[id];
+    if (batchIdSet.has(id) && b.syncStatus === "conflict") {
+      batches[id] = {
+        ...b,
+        syncStatus: "synced" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    } else {
+      batches[id] = b;
+    }
+  }
+
+  const operations = state.operations.map((op) => {
+    if (batchIdSet.has(op.batchId) && op.syncStatus === "conflict") {
+      return {
+        ...op,
+        syncStatus: "synced" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    }
+    return op;
+  });
+
+  const conflictBatchNos = new Set(
+    batchIds
+      .map((id) => state.batches[id]?.batchNo)
+      .filter((v): v is string => !!v)
+  );
+  const auditLogs = state.auditLogs.map((log) => {
+    if (conflictBatchNos.has(log.batchNo) && log.syncStatus === "conflict") {
+      return {
+        ...log,
+        syncStatus: "synced" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    }
+    return log;
+  });
+
+  return {
+    ...state,
+    batches,
+    operations,
+    auditLogs,
+    lastSyncedAt: timestamp,
+  };
+}
+
+export function resolveConflictLater(
+  state: LedgerState,
+  batchIds: string[],
+  timestamp: string = nowIso()
+): LedgerState {
+  const batchIdSet = new Set(batchIds);
+  const batches: Record<string, BatchLedgerDTO> = {};
+  for (const id of Object.keys(state.batches)) {
+    const b = state.batches[id];
+    if (batchIdSet.has(id) && b.syncStatus === "conflict") {
+      batches[id] = {
+        ...b,
+        syncStatus: "pending" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    } else {
+      batches[id] = b;
+    }
+  }
+
+  const operations = state.operations.map((op) => {
+    if (batchIdSet.has(op.batchId) && op.syncStatus === "conflict") {
+      return {
+        ...op,
+        syncStatus: "pending" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    }
+    return op;
+  });
+
+  const conflictBatchNos = new Set(
+    batchIds
+      .map((id) => state.batches[id]?.batchNo)
+      .filter((v): v is string => !!v)
+  );
+  const auditLogs = state.auditLogs.map((log) => {
+    if (conflictBatchNos.has(log.batchNo) && log.syncStatus === "conflict") {
+      return {
+        ...log,
+        syncStatus: "pending" as SyncStatus,
+        updatedAt: timestamp,
+      };
+    }
+    return log;
+  });
+
+  return {
+    ...state,
+    batches,
+    operations,
+    auditLogs,
   };
 }
 

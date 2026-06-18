@@ -4,6 +4,30 @@ export type AuditLogType = "create_batch" | "inbound" | "outbound" | "loss" | "u
 
 export type SyncStatus = "pending" | "synced" | "conflict" | "error";
 
+export type ConflictResolutionStrategy = "local_overwrite" | "keep_server" | "handle_later";
+
+export interface SyncStats {
+  pendingBatches: number;
+  pendingOperations: number;
+  pendingAuditLogs: number;
+  conflictBatches: number;
+  conflictOperations: number;
+  conflictAuditLogs: number;
+  syncedBatches: number;
+  syncedOperations: number;
+  syncedAuditLogs: number;
+  lastSyncedAt?: string;
+}
+
+export interface ConflictDetail {
+  entityType: "batch" | "operation" | "audit_log";
+  entityId: string;
+  batchNo?: string;
+  localUpdatedAt: string;
+  serverUpdatedAt?: string;
+  description: string;
+}
+
 export const SCHEMA_VERSION = 1;
 
 export interface BaseEntity {

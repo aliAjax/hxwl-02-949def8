@@ -586,6 +586,52 @@ export function useInventoryStore() {
     [clearWriteError]
   );
 
+  const getSyncStats = useCallback(async () => {
+    return InventoryService.getSyncStats();
+  }, []);
+
+  const performSync = useCallback(
+    async (options?: { simulateConflict?: boolean; conflictRatio?: number }) => {
+      clearWriteError();
+      const result = await InventoryService.performSync(options);
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: "同步失败，请稍后重试",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
+  const resolveConflict = useCallback(
+    async (
+      batchIds: string[],
+      strategy: "local_overwrite" | "keep_server" | "handle_later"
+    ) => {
+      clearWriteError();
+      const result = await InventoryService.resolveConflict(batchIds, strategy);
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "冲突处理失败",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
+  const getConflictBatchDetails = useCallback(async () => {
+    return InventoryService.getConflictBatchDetails();
+  }, []);
+
+  const markAllSynced = useCallback(async () => {
+    clearWriteError();
+    await InventoryService.markAllSynced();
+  }, [clearWriteError]);
+
   return {
     storeState,
     ledgerState,
@@ -619,6 +665,11 @@ export function useInventoryStore() {
     pendingSyncCount,
     markExpiryAlertHandled,
     unmarkExpiryAlertHandled,
+    getSyncStats,
+    performSync,
+    resolveConflict,
+    getConflictBatchDetails,
+    markAllSynced,
   };
 }
 

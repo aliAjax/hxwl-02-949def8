@@ -7,6 +7,7 @@ import LowStockModule from "./ledger/LowStockModule";
 import ProcurementSuggestionModule from "./ledger/ProcurementSuggestionModule";
 import RestockSuggestionPage from "./ledger/RestockSuggestionPage";
 import RoleWorkspaceModule from "./ledger/RoleWorkspaceModule";
+import SyncCenterModule from "./ledger/SyncCenterModule";
 import HerbAutocomplete from "./ledger/HerbAutocomplete";
 import ImportModal from "./ledger/ImportModal";
 import type { HerbSuggestion } from "./ledger/HerbAutocomplete";
@@ -192,7 +193,7 @@ function App() {
   const [formData, setFormData] = useState<Record<string, string>>({ ...emptyForm });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock" | "procurement" | "restock" | "workspace">("workspace");
+  const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock" | "procurement" | "restock" | "workspace" | "sync">("workspace");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -501,6 +502,12 @@ function App() {
         >
           安全库存规则
         </button>
+        <button
+          className={tab === "sync" ? "tab tab-active" : "tab"}
+          onClick={() => setTab("sync")}
+        >
+          同步中心
+        </button>
       </nav>
 
       {tab === "workspace" ? (
@@ -531,6 +538,11 @@ function App() {
         <SafetyStockModule
           safetyStockStore={safetyStockStore}
           ledgerStore={ledgerStore}
+        />
+      ) : tab === "sync" ? (
+        <SyncCenterModule
+          ledgerStore={ledgerStore}
+          inventoryStore={ledgerStore.inventoryStore}
         />
       ) : (
         <>
