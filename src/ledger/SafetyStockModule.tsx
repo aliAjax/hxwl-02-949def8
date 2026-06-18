@@ -403,8 +403,13 @@ function SafetyStockModule({
         calcMode: "fixed",
         thresholdGrams: LOW_STOCK_GRAMS,
       };
-      const tempState = { ...ssState };
-      delete tempState.rules[ruleId];
+      const tempState = {
+        ...ssState,
+        rules: {
+          ...ssState.rules,
+          [ruleId]: { ...ssState.rules[ruleId], isDeleted: true },
+        },
+      };
       const result = previewRuleChange(
         ledgerState,
         ssState,

@@ -1661,25 +1661,17 @@ function calculateAvgDailyConsumption(
   const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
   let totalQty = 0;
-  let earliestOpTime = now.getTime();
 
   for (const op of outboundOps) {
     const opTime = new Date(op.createdAt).getTime();
     if (opTime >= cutoff.getTime()) {
       totalQty += op.quantity;
-      if (opTime < earliestOpTime) {
-        earliestOpTime = opTime;
-      }
     }
   }
 
   if (totalQty === 0) return 0;
 
-  const daysSpan = Math.max(
-    1,
-    Math.ceil((now.getTime() - earliestOpTime) / (24 * 60 * 60 * 1000))
-  );
-  return totalQty / daysSpan;
+  return Math.round((totalQty / days) * 100) / 100;
 }
 
 export function selectProcurementSuggestions(
