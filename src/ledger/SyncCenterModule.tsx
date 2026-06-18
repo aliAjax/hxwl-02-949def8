@@ -12,44 +12,23 @@ import {
   selectOperationsByBatchId,
   selectAuditLogsByBatchNo,
 } from "./store";
-import type { LedgerStore, OperationResult } from "./store";
-import type { BatchRecord, OperationRecord, AuditLogRecord, ConflictResolutionStrategy } from "./types";
-import type { InventoryStore } from "./db/useInventoryStore";
+import type { LedgerStore } from "./store";
+import { AUDIT_LOG_LABELS, OPERATION_LABELS, type ConflictResolutionStrategy } from "./types";
 
 interface SyncCenterModuleProps {
   ledgerStore: LedgerStore;
-  inventoryStore: InventoryStore;
 }
 
-interface SyncStats {
-  pendingBatches: number;
-  pendingOperations: number;
-  pendingAuditLogs: number;
-  conflictBatches: number;
-  conflictOperations: number;
-  conflictAuditLogs: number;
-  syncedBatches: number;
-  syncedOperations: number;
-  syncedAuditLogs: number;
-  lastSyncedAt?: string;
-}
-
-interface ConflictBatchDetail {
-  batch: BatchRecord;
-  operations: OperationRecord[];
-  auditLogs: AuditLogRecord[];
-}
-
-function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps) {
+function SyncCenterModule({ ledgerStore }: SyncCenterModuleProps) {
   const { state: ledgerState } = ledgerStore;
+  const inventoryStore = ledgerStore.inventoryStore;
 
-  const [syncStats, setSyncStats] = useState<SyncStats | null>(null);
-  const [conflictDetails, setConflictDetails] = useState<ConflictBatchDetail[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [simulateConflict, setSimulateConflict] = useState(false);
   const [expandedConflictId, setExpandedConflictId] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [selectedConflictIds, setSelectedConflictIds] = useState<Set<string>>(new Set());
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | undefined>(undefined);
 
   const pendingStats = useMemo(() => {
     const batches = selectPendingBatches(ledgerState).length;
@@ -72,25 +51,22 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
     return { batches, operations, auditLogs };
   }, [ledgerState]);
 
-  const refreshStats = useCallback(async () => {
-    const [stats, conflicts] = await Promise.all([
-      inventoryStore.getSyncStats(),
-      inventoryStore.getConflictBatchDetails(),
-    ]);
-    setSyncStats(stats);
-    setConflictDetails(conflicts);
-  }, [inventoryStore]);
+  const conflictBatches = useMemo(
+    () => selectConflictBatches(ledgerState),
+    [ledgerState]
+  );
 
   useEffect(() => {
-    refreshStats();
-  }, [refreshStats]);
-
-  useEffect(() => {
-    const totalBatches = pendingStats.batches + conflictStats.batches + syncedStats.batches;
-    if (syncStats && totalBatches > 0) {
-      refreshStats();
-    }
-  }, [ledgerState]);
+    let cancelled = false;
+    inventoryStore.getSyncStats().then((stats) => {
+      if (!cancelled) {
+        setLastSyncedAt(stats.lastSyncedAt);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [inventoryStore, ledgerState]);
 
   const handleSync = useCallback(async () => {
     setIsSyncing(true);
@@ -113,16 +89,15 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
       }
     } finally {
       setIsSyncing(false);
-      await refreshStats();
-      await ledgerStore.refresh();
+      await inventoryStore.refreshAll();
     }
-  }, [inventoryStore, simulateConflict, ledgerStore, refreshStats]);
+  }, [inventoryStore, simulateConflict]);
 
   const handleResolveConflict = useCallback(
     async (batchIds: string[], strategy: ConflictResolutionStrategy) => {
       if (batchIds.length === 0) return;
       setSyncMessage(null);
-      const result: OperationResult = await inventoryStore.resolveConflict(batchIds, strategy);
+      const result = await inventoryStore.resolveConflict(batchIds, strategy);
       if (result.ok) {
         const strategyText = {
           local_overwrite: "本地覆盖",
@@ -134,10 +109,9 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
         setSyncMessage(result.error || "冲突处理失败");
       }
       setSelectedConflictIds(new Set());
-      await refreshStats();
-      await ledgerStore.refresh();
+      await inventoryStore.refreshAll();
     },
-    [inventoryStore, ledgerStore, refreshStats]
+    [inventoryStore]
   );
 
   const toggleConflictExpand = (batchId: string) => {
@@ -157,18 +131,12 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
   };
 
   const toggleSelectAll = () => {
-    if (selectedConflictIds.size === conflictDetails.length) {
+    if (selectedConflictIds.size === conflictBatches.length) {
       setSelectedConflictIds(new Set());
     } else {
-      setSelectedConflictIds(new Set(conflictDetails.map((d) => d.batch.id)));
+      setSelectedConflictIds(new Set(conflictBatches.map((b) => b.id)));
     }
   };
-
-  const getOperationsForBatch = (batchId: string) =>
-    selectOperationsByBatchId(ledgerState, batchId);
-
-  const getAuditLogsForBatchNo = (batchNo: string) =>
-    selectAuditLogsByBatchNo(ledgerState, batchNo);
 
   const formatDateTime = (iso?: string) => {
     if (!iso) return "—";
@@ -192,7 +160,7 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
           <h2>管理本地与服务端的数据同步状态</h2>
         </div>
         <div className="sync-last-sync">
-          <span>最近同步：{formatDateTime(syncStats?.lastSyncedAt)}</span>
+          <span>最近同步：{formatDateTime(lastSyncedAt)}</span>
         </div>
       </div>
 
@@ -258,20 +226,20 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
       </div>
 
       {syncMessage && (
-        <div className={`sync-message ${syncMessage.includes("失败") || syncMessage.includes("失败") ? "sync-message-error" : "sync-message-info"}`}>
+        <div className={`sync-message ${syncMessage.includes("失败") ? "sync-message-error" : "sync-message-info"}`}>
           {syncMessage}
         </div>
       )}
 
-      {conflictDetails.length > 0 && (
+      {conflictBatches.length > 0 && (
         <div className="sync-conflict-section">
           <div className="sync-conflict-header">
-            <h3>冲突批号列表（共 {conflictDetails.length} 个）</h3>
+            <h3>冲突批号列表（共 {conflictBatches.length} 个）</h3>
             <div className="sync-bulk-actions">
               <label className="sync-checkbox-label">
                 <input
                   type="checkbox"
-                  checked={selectedConflictIds.size === conflictDetails.length && conflictDetails.length > 0}
+                  checked={selectedConflictIds.size === conflictBatches.length && conflictBatches.length > 0}
                   onChange={toggleSelectAll}
                 />
                 <span>全选</span>
@@ -317,12 +285,11 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
           </div>
 
           <div className="sync-conflict-list">
-            {conflictDetails.map((detail) => {
-              const batch = detail.batch;
+            {conflictBatches.map((batch) => {
               const isExpanded = expandedConflictId === batch.id;
               const isSelected = selectedConflictIds.has(batch.id);
-              const batchOps = getOperationsForBatch(batch.id);
-              const batchLogs = getAuditLogsForBatchNo(batch.batchNo);
+              const batchOps = selectOperationsByBatchId(ledgerState, batch.id);
+              const batchLogs = selectAuditLogsByBatchNo(ledgerState, batch.batchNo);
 
               return (
                 <div
@@ -345,7 +312,7 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
                       <div className="sync-conflict-batch-info">
                         <span className="sync-status sync-conflict">⚡ 冲突</span>
                         <span className="sync-conflict-batch-no">{batch.batchNo}</span>
-                        <span className="sync-conflict-herb">{batch.herbName}</span>
+                        <span className="sync-conflict-herb">{batch.name}</span>
                       </div>
                       <div className="sync-conflict-counts">
                         <span>{batchOps.length} 条流水</span>
@@ -411,7 +378,7 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
                                   <td>{formatDateTime(op.createdAt)}</td>
                                   <td>
                                     <span className={`op-type op-${op.type}`}>
-                                      {op.type === "inbound" ? "入库" : op.type === "outbound" ? "出库" : "调整"}
+                                      {OPERATION_LABELS[op.type] || op.type}
                                     </span>
                                   </td>
                                   <td>{op.quantity.toLocaleString()}</td>
@@ -431,18 +398,20 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
                             <thead>
                               <tr>
                                 <th>时间</th>
-                                <th>操作</th>
+                                <th>操作类型</th>
                                 <th>操作人</th>
-                                <th>变更摘要</th>
+                                <th>变更克数</th>
+                                <th>备注</th>
                               </tr>
                             </thead>
                             <tbody>
                               {batchLogs.map((log) => (
                                 <tr key={log.id}>
                                   <td>{formatDateTime(log.createdAt)}</td>
-                                  <td>{log.action}</td>
+                                  <td>{AUDIT_LOG_LABELS[log.logType] || log.logType}</td>
                                   <td>{log.operator || "—"}</td>
-                                  <td>{log.changeSummary || "—"}</td>
+                                  <td>{log.changeGrams.toLocaleString()}</td>
+                                  <td>{log.remark || "—"}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -465,7 +434,7 @@ function SyncCenterModule({ ledgerStore, inventoryStore }: SyncCenterModuleProps
         </div>
       )}
 
-      {conflictDetails.length === 0 && totalConflict === 0 && totalPending === 0 && (
+      {conflictBatches.length === 0 && totalConflict === 0 && totalPending === 0 && (
         <div className="sync-empty">
           <div className="sync-empty-icon">🎉</div>
           <div className="sync-empty-text">所有数据已成功同步，暂无待处理项。</div>

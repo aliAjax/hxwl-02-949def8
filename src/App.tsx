@@ -542,7 +542,6 @@ function App() {
       ) : tab === "sync" ? (
         <SyncCenterModule
           ledgerStore={ledgerStore}
-          inventoryStore={ledgerStore.inventoryStore}
         />
       ) : (
         <>
