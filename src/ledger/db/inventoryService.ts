@@ -69,12 +69,11 @@ export interface ImportError {
 }
 
 export type ImportValidationResult =
-  | { ok: true; preview: ImportPreview; warnings?: string[] }
+  | { ok: true; preview: ImportPreview }
   | { ok: false; errors: ImportError[] };
 
 export function validateImportData(raw: unknown): ImportValidationResult {
   const errors: ImportError[] = [];
-  const warnings: string[] = [];
 
   if (!raw || typeof raw !== "object") {
     return { ok: false, errors: [{ type: "format", message: "导入数据格式无效，不是有效的 JSON 对象" }] };
@@ -106,14 +105,26 @@ export function validateImportData(raw: unknown): ImportValidationResult {
     });
   }
 
-  if (!Array.isArray(data.herbs)) {
-    warnings.push("数据中缺少 herbs 字段，饮片信息将不会被导入");
+  const requiredSnapshotFields: Array<{ key: keyof ExportData; label: string }> = [
+    { key: "herbs", label: "herbs（饮片表）" },
+    { key: "auditLogs", label: "auditLogs（审计日志表）" },
+    { key: "safetyStockRules", label: "safetyStockRules（安全库存规则表）" },
+    { key: "rolePreferences", label: "rolePreferences（角色偏好表）" },
+  ];
+
+  const missingSnapshotFields: string[] = [];
+  for (const { key, label } of requiredSnapshotFields) {
+    if (!Array.isArray(data[key])) {
+      missingSnapshotFields.push(label);
+    }
   }
-  if (!Array.isArray(data.safetyStockRules)) {
-    warnings.push("数据中缺少 safetyStockRules 字段，安全库存规则将不会被导入");
-  }
-  if (!Array.isArray(data.rolePreferences)) {
-    warnings.push("数据中缺少 rolePreferences 字段，角色偏好将不会被导入");
+
+  if (missingSnapshotFields.length > 0) {
+    errors.push({
+      type: "field_missing",
+      message: `快照缺少必要的数据表字段：${missingSnapshotFields.join("、")}`,
+      details: missingSnapshotFields,
+    });
   }
 
   const requiredBatchFields = ["id", "batchNo", "name", "herbId"];
@@ -191,7 +202,7 @@ export function validateImportData(raw: unknown): ImportValidationResult {
     schemaVersion: typeof data.schemaVersion === "number" ? data.schemaVersion : 0,
   };
 
-  return { ok: true, preview, warnings: warnings.length > 0 ? warnings : undefined };
+  return { ok: true, preview };
 }
 
 export class InventoryService {

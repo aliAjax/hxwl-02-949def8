@@ -14,7 +14,7 @@ interface ImportModalProps {
   checkBatchNoConflicts: (batches: unknown[]) => Promise<string[]>;
 }
 
-type Step = "idle" | "preview" | "conflict_check" | "importing" | "done" | "error";
+type Step = "idle" | "preview" | "importing" | "done" | "error";
 
 function formatDateTime(iso: string): string {
   if (!iso) return "—";
@@ -40,8 +40,6 @@ function ImportModal({
   const [parsedData, setParsedData] = useState<ExportData | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [validationErrors, setValidationErrors] = useState<ImportError[]>([]);
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const [conflictBatchNos, setConflictBatchNos] = useState<string[]>([]);
   const [importError, setImportError] = useState("");
   const [fileName, setFileName] = useState("");
 
@@ -50,8 +48,6 @@ function ImportModal({
     setParsedData(null);
     setPreview(null);
     setValidationErrors([]);
-    setWarnings([]);
-    setConflictBatchNos([]);
     setImportError("");
     setFileName("");
     if (fileInputRef.current) {
@@ -97,14 +93,21 @@ function ImportModal({
 
         setParsedData(parsed as ExportData);
         setPreview(result.preview);
-        setWarnings(result.warnings ?? []);
-        setStep("preview");
 
-        setStep("conflict_check");
         const conflicts = await checkBatchNoConflicts(
           (parsed as ExportData).batches
         );
-        setConflictBatchNos(conflicts);
+        if (conflicts.length > 0) {
+          const conflictError: ImportError = {
+            type: "batchNo_conflict",
+            message: `以下批号在当前本地数据库中已存在，无法继续导入：${conflicts.join("、")}`,
+            details: conflicts,
+          };
+          setValidationErrors([conflictError]);
+          setStep("error");
+          return;
+        }
+
         setStep("preview");
       } catch {
         setValidationErrors([
@@ -212,38 +215,6 @@ function ImportModal({
                   数据版本：v{preview.schemaVersion}
                 </p>
               </div>
-
-              {conflictBatchNos.length > 0 && (
-                <div className="import-warning-card import-conflict-warning">
-                  <h4>⚠️ 批号冲突警告</h4>
-                  <p>
-                    以下批号在当前数据库中已存在，导入后将<strong>覆盖</strong>原有数据：
-                  </p>
-                  <div className="import-conflict-list">
-                    {conflictBatchNos.slice(0, 10).map((no) => (
-                      <span key={no} className="conflict-chip">
-                        {no}
-                      </span>
-                    ))}
-                    {conflictBatchNos.length > 10 && (
-                      <span className="conflict-more">
-                        …等共 {conflictBatchNos.length} 个
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {warnings.length > 0 && (
-                <div className="import-warning-card">
-                  <h4>⚠️ 注意事项</h4>
-                  <ul>
-                    {warnings.map((w, i) => (
-                      <li key={i}>{w}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
 
               <div className="import-danger-hint">
                 <strong>⚠️ 重要提示：</strong>导入操作将<strong>替换</strong>当前本地数据库中的所有数据（包括所有批号、流水、规则和偏好），此操作不可撤销。建议先导出当前数据作为备份。
