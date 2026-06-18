@@ -30,6 +30,7 @@ interface InventoryRecord {
   expiry: string;
   stockGrams: number;
   category: string;
+  unit: string;
 }
 
 const project = {
@@ -202,6 +203,7 @@ function App() {
       expiry: batch.expiry,
       stockGrams: selectCurrentStock(ledgerState, batch.id),
       category: batch.category,
+      unit: batch.unit,
     }));
     result.sort((a, b) => {
       const aBatch = Object.values(ledgerState.batches).find(
@@ -332,9 +334,9 @@ function App() {
       return `近效期剩余${diffDays}天`;
     }
     if (record.stockGrams < 1200) {
-      return `低于安全库存${record.stockGrams}g`;
+      return `低于安全库存${record.stockGrams}${record.unit}`;
     }
-    return `批号${record.batch}，库存${record.stockGrams}g`;
+    return `批号${record.batch}，库存${record.stockGrams}${record.unit}`;
   };
 
   const handleExportFull = useCallback(async () => {
