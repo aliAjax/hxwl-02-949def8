@@ -16,6 +16,7 @@ import {
   NEAR_EXPIRY_DAYS,
   NEAR_EXPIRY_UNSAFE_DAYS,
   NewBatchInput,
+  NewBatchAdjustmentInput,
   NewOperationInput,
   NewSafetyStockRuleInput,
   OperationResult,
@@ -507,6 +508,59 @@ export function applyOperation(
   };
 }
 
+export function applyBatchAdjustment(
+  state: LedgerState,
+  input: NewBatchAdjustmentInput
+): OperationResult & { state?: LedgerState } {
+  const batch = selectBatchById(state, input.batchId);
+  if (!batch) {
+    return { ok: false, error: "批号不存在或已被移除" };
+  }
+  if (!Number.isFinite(input.actualStock) || input.actualStock < 0) {
+    return { ok: false, error: "实际库存不能为负数" };
+  }
+  const current = selectCurrentStock(state, input.batchId);
+  const diff = input.actualStock - current;
+  if (diff === 0) {
+    return { ok: false, error: "实际库存与当前库存相同，无需调整" };
+  }
+  const opType: OperationType = diff > 0 ? "inbound" : "loss";
+  const quantity = Math.abs(diff);
+  const balanceAfter = input.actualStock;
+  const ts = nowIso();
+  const reason = input.reason?.trim() || "盘点调整";
+  const op: LedgerOperationDTO = {
+    ...createBaseEntity(createId("op")),
+    batchId: input.batchId,
+    type: opType,
+    quantity,
+    balanceAfter,
+    operator: input.operator || "系统",
+    remark: `批号调整：${reason}`,
+  };
+  const changeGrams = diff;
+  const auditLog: InventoryAuditLogDTO = createAuditLog({
+    logType: "batch_adjust",
+    herbName: batch.name,
+    batchNo: batch.batchNo,
+    changeGrams,
+    operator: input.operator || "系统",
+    remark: `盘点调整：${current}${batch.unit} → ${input.actualStock}${batch.unit}（${reason}）`,
+  });
+  return {
+    ok: true,
+    state: {
+      ...state,
+      batches: {
+        ...state.batches,
+        [input.batchId]: { ...batch, updatedAt: ts, syncStatus: "pending" },
+      },
+      operations: [op, ...state.operations],
+      auditLogs: [auditLog, ...state.auditLogs],
+    },
+  };
+}
+
 interface SeedMovement {
   type: OperationType;
   quantity: number;
@@ -853,6 +907,7 @@ export interface LedgerStore {
   state: LedgerState;
   addBatch: (input: NewBatchInput) => Promise<string | null>;
   recordOperation: (input: NewOperationInput) => OperationResult;
+  recordBatchAdjustment: (input: NewBatchAdjustmentInput) => OperationResult;
   recordSafetyStockChange: (params: {
     herbName: string;
     batchNo: string;
@@ -873,6 +928,7 @@ export function useLedgerStore(
     ledgerState: state,
     addBatch: asyncAddBatch,
     recordOperation: asyncRecordOperation,
+    recordBatchAdjustment: asyncRecordBatchAdjustment,
     recordSafetyStockChange: asyncRecordSafetyStockChange,
   } = inventoryStore;
 
@@ -911,6 +967,24 @@ export function useLedgerStore(
       return { ok: true };
     },
     [optimisticState, asyncRecordOperation]
+  );
+
+  const recordBatchAdjustment = useCallback(
+    (input: NewBatchAdjustmentInput): OperationResult => {
+      const optimisticResult = applyBatchAdjustment(optimisticState, input);
+      if (!optimisticResult.ok || !optimisticResult.state) {
+        return { ok: false, error: optimisticResult.error };
+      }
+      setOptimisticState(optimisticResult.state);
+      void (async () => {
+        const result = await asyncRecordBatchAdjustment(input);
+        if (!result.ok) {
+          setOptimisticState(lastDbStateRef.current);
+        }
+      })();
+      return { ok: true };
+    },
+    [optimisticState, asyncRecordBatchAdjustment]
   );
 
   const recordSafetyStockChange = useCallback(
@@ -952,6 +1026,7 @@ export function useLedgerStore(
     state: optimisticState,
     addBatch,
     recordOperation,
+    recordBatchAdjustment,
     recordSafetyStockChange,
     inventoryStore,
   };

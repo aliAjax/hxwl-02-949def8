@@ -12,6 +12,7 @@ import {
 import { STORES, type AuditLogRecord, type OperationRecord } from "./schema";
 import { buildSeedData } from "./seed";
 import type {
+  NewBatchAdjustmentInput,
   NewBatchInput,
   NewOperationInput,
   NewSafetyStockRuleInput,
@@ -311,6 +312,84 @@ export class InventoryService {
         return { ok: false, error: `操作失败：${e.message}` };
       }
       return { ok: false, error: "操作失败：未知错误" };
+    }
+  }
+
+  static async recordBatchAdjustment(
+    input: NewBatchAdjustmentInput
+  ): Promise<OperationResult> {
+    const batch = await BatchRepository.getById(input.batchId);
+    if (!batch) {
+      return { ok: false, error: "批号不存在或已被移除" };
+    }
+    if (!Number.isFinite(input.actualStock) || input.actualStock < 0) {
+      return { ok: false, error: "实际库存不能为负数" };
+    }
+
+    const current = await OperationRepository.getCurrentStock(input.batchId);
+    const diff = input.actualStock - current;
+    if (diff === 0) {
+      return { ok: false, error: "实际库存与当前库存相同，无需调整" };
+    }
+
+    const opType: OperationType = diff > 0 ? "inbound" : "loss";
+    const quantity = Math.abs(diff);
+    const balanceAfter = input.actualStock;
+    const now = nowIso();
+    const reason = input.reason?.trim() || "盘点调整";
+
+    const opId = createId("op");
+    const operation: OperationRecord = {
+      id: opId,
+      batchId: input.batchId,
+      type: opType,
+      quantity,
+      balanceAfter,
+      operator: input.operator || "系统",
+      remark: `批号调整：${reason}`,
+      createdAt: now,
+      updatedAt: now,
+      isDeleted: false,
+      syncStatus: "pending",
+    };
+
+    const logId = createId("log");
+    const auditLog: AuditLogRecord = {
+      id: logId,
+      logType: "batch_adjust",
+      herbName: batch.name,
+      batchNo: batch.batchNo,
+      changeGrams: diff,
+      operator: input.operator || "系统",
+      remark: `盘点调整：${current}${batch.unit} → ${input.actualStock}${batch.unit}（${reason}）`,
+      createdAt: now,
+      updatedAt: now,
+      isDeleted: false,
+      syncStatus: "pending",
+    };
+
+    const updatedBatch = {
+      ...batch,
+      updatedAt: now,
+      syncStatus: "pending" as const,
+    };
+
+    try {
+      await inventoryDB.withTransaction(
+        [STORES.BATCHES, STORES.OPERATIONS, STORES.AUDIT_LOGS],
+        "readwrite",
+        (stores) => {
+          stores[STORES.BATCHES].put(updatedBatch);
+          stores[STORES.OPERATIONS].put(operation);
+          stores[STORES.AUDIT_LOGS].put(auditLog);
+        }
+      );
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Error) {
+        return { ok: false, error: `批号调整失败：${e.message}` };
+      }
+      return { ok: false, error: "批号调整失败：未知错误" };
     }
   }
 

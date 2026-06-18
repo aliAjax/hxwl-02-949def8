@@ -592,6 +592,81 @@ select {
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   padding: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.adjust-action {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+  border-radius: 6px;
+  padding: 6px 14px;
+}
+
+.adjust-action:hover {
+  opacity: 0.85;
+}
+
+.adjust-form {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adjust-form-hint {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.adjust-form-hint strong {
+  color: var(--primary);
+  font-size: 16px;
+}
+
+.adjust-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.adjust-form label span {
+  color: #475569;
+  font-weight: 500;
+}
+
+.adjust-form input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.adjust-form input.input-error {
+  border-color: #e11d48;
+}
+
+.adjust-form-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.adjust-form-actions .primary-action {
+  font-size: 13px;
+  padding: 8px 20px;
+}
+
+.adjust-form-actions .clear-filter {
+  font-size: 13px;
 }
 
 .stock-display {
@@ -2433,6 +2508,12 @@ select {
   border-color: var(--warn);
 }
 
+.audit-filter-chips button.audit-chip-adjust.filter-active {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+
 .audit-log-list {
   display: grid;
   gap: 10px;
@@ -2483,6 +2564,10 @@ select {
 
 .audit-update_safety_stock .audit-log-type {
   background: var(--warn);
+}
+
+.audit-batch_adjust .audit-log-type {
+  background: #b45309;
 }
 
 .audit-log-main {

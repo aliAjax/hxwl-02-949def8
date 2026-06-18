@@ -65,7 +65,8 @@ export interface AuditLogRecord {
     | "inbound"
     | "outbound"
     | "loss"
-    | "update_safety_stock";
+    | "update_safety_stock"
+    | "batch_adjust";
   herbName: string;
   batchNo: string;
   changeGrams: number;

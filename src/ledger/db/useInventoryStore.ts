@@ -22,6 +22,7 @@ import type {
 import type {
   ExpiryAlertHandling,
   LedgerState,
+  NewBatchAdjustmentInput,
   NewBatchInput,
   NewExpiryAlertHandlingInput,
   NewOperationInput,
@@ -199,6 +200,21 @@ export function useInventoryStore() {
         setStoreState((prev) => ({
           ...prev,
           writeError: result.error || "操作失败",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
+  const recordBatchAdjustment = useCallback(
+    async (input: NewBatchAdjustmentInput): Promise<OperationResult> => {
+      clearWriteError();
+      const result = await InventoryService.recordBatchAdjustment(input);
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "批号调整失败",
         }));
       }
       return result;
@@ -552,6 +568,7 @@ export function useInventoryStore() {
     refreshAll,
     addBatch,
     recordOperation,
+    recordBatchAdjustment,
     recordSafetyStockChange,
     addSafetyStockRule,
     updateSafetyStockRule,

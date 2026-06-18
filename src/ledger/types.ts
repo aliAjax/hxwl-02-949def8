@@ -1,6 +1,6 @@
 export type OperationType = "inbound" | "outbound" | "loss";
 
-export type AuditLogType = "create_batch" | "inbound" | "outbound" | "loss" | "update_safety_stock";
+export type AuditLogType = "create_batch" | "inbound" | "outbound" | "loss" | "update_safety_stock" | "batch_adjust";
 
 export type SyncStatus = "pending" | "synced" | "conflict" | "error";
 
@@ -89,6 +89,13 @@ export interface NewOperationInput {
   remark: string;
 }
 
+export interface NewBatchAdjustmentInput {
+  batchId: string;
+  actualStock: number;
+  operator: string;
+  reason: string;
+}
+
 export interface OperationResult {
   ok: boolean;
   error?: string;
@@ -110,6 +117,7 @@ export const AUDIT_LOG_LABELS: Record<AuditLogType, string> = {
   outbound: "出库",
   loss: "损耗",
   update_safety_stock: "修改安全库存",
+  batch_adjust: "批号调整",
 };
 
 export const AUDIT_LOG_SIGNS: Record<AuditLogType, string> = {
@@ -118,6 +126,7 @@ export const AUDIT_LOG_SIGNS: Record<AuditLogType, string> = {
   outbound: "-",
   loss: "-",
   update_safety_stock: "→",
+  batch_adjust: "↔",
 };
 
 export const OPERATION_SIGNS: Record<OperationType, string> = {

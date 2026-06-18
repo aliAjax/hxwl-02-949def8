@@ -6,6 +6,7 @@ import {
   CATEGORIES,
   InventoryAuditLogDTO,
   LedgerOperationDTO,
+  NewBatchAdjustmentInput,
   NewBatchInput,
   OPERATION_LABELS,
   OPERATION_SIGNS,
@@ -89,7 +90,7 @@ interface LedgerModuleProps {
 }
 
 function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
-  const { state, addBatch, recordOperation, inventoryStore } = store;
+  const { state, addBatch, recordOperation, recordBatchAdjustment, inventoryStore } = store;
   const { herbs } = inventoryStore;
   const [showForm, setShowForm] = useState(false);
   const [batchForm, setBatchForm] = useState({ ...emptyBatchForm });
@@ -362,6 +363,7 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
                     stateRef={state}
                     safetyStockState={safetyStockState}
                     onRecord={recordOperation}
+                    onAdjust={recordBatchAdjustment}
                   />
                 ))}
               </div>
@@ -441,6 +443,12 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
             >
               改安全库存 ({auditLogTypeCounts.update_safety_stock ?? 0})
             </button>
+            <button
+              className={`${logTypeFilter === "batch_adjust" ? "filter-active" : ""} audit-chip-adjust`}
+              onClick={() => setLogTypeFilter("batch_adjust")}
+            >
+              批号调整 ({auditLogTypeCounts.batch_adjust ?? 0})
+            </button>
           </div>
         </div>
 
@@ -485,13 +493,23 @@ interface BatchLedgerCardProps {
   stateRef: LedgerStore["state"];
   safetyStockState: SafetyStockState;
   onRecord: LedgerStore["recordOperation"];
+  onAdjust: LedgerStore["recordBatchAdjustment"];
 }
 
-function BatchLedgerCard({ batchId, stateRef, safetyStockState, onRecord }: BatchLedgerCardProps) {
+const emptyAdjustForm = {
+  actualStock: "",
+  operator: "",
+  reason: "",
+};
+
+function BatchLedgerCard({ batchId, stateRef, safetyStockState, onRecord, onAdjust }: BatchLedgerCardProps) {
   const state = stateRef;
   const batch = state.batches[batchId];
   const [opForm, setOpForm] = useState({ ...emptyOpForm });
   const [opError, setOpError] = useState("");
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [adjustForm, setAdjustForm] = useState({ ...emptyAdjustForm });
+  const [adjustError, setAdjustError] = useState("");
 
   if (!batch) return null;
 
@@ -526,6 +544,44 @@ function BatchLedgerCard({ batchId, stateRef, safetyStockState, onRecord }: Batc
     setOpError("");
   };
 
+  const submitAdjust = () => {
+    const actual = Number(adjustForm.actualStock);
+    if (!adjustForm.actualStock.trim() || Number.isNaN(actual)) {
+      setAdjustError("实际库存必须是数字");
+      return;
+    }
+    if (actual < 0) {
+      setAdjustError("实际库存不能为负数");
+      return;
+    }
+    if (actual === currentStock) {
+      setAdjustError("实际库存与当前库存相同，无需调整");
+      return;
+    }
+    if (!adjustForm.operator.trim()) {
+      setAdjustError("操作人不能为空");
+      return;
+    }
+    if (!adjustForm.reason.trim()) {
+      setAdjustError("调整原因不能为空");
+      return;
+    }
+    const input: NewBatchAdjustmentInput = {
+      batchId,
+      actualStock: actual,
+      operator: adjustForm.operator.trim(),
+      reason: adjustForm.reason.trim(),
+    };
+    const result = onAdjust(input);
+    if (!result.ok) {
+      setAdjustError(result.error ?? "批号调整失败");
+      return;
+    }
+    setAdjustForm({ ...emptyAdjustForm });
+    setAdjustError("");
+    setShowAdjust(false);
+  };
+
   return (
     <article className="batch-card">
       <header className="batch-card-head">
@@ -556,7 +612,73 @@ function BatchLedgerCard({ batchId, stateRef, safetyStockState, onRecord }: Batc
           </strong>
           {low && <span className="stock-hint">低于安全库存 {threshold}g</span>}
         </div>
+        <button
+          className="adjust-action"
+          onClick={() => setShowAdjust((v) => !v)}
+        >
+          {showAdjust ? "取消调整" : "批号调整"}
+        </button>
       </div>
+
+      {showAdjust && (
+        <div className="adjust-form">
+          <div className="adjust-form-hint">
+            当前系统库存 <strong>{currentStock}</strong> {batch.unit}，输入盘点后的实际库存以修正差异
+          </div>
+          <label>
+            <span>实际库存 <span className="required-mark">*</span></span>
+            <input
+              type="number"
+              min="0"
+              value={adjustForm.actualStock}
+              placeholder="盘点后的实际库存"
+              onChange={(e) => {
+                setAdjustForm((prev) => ({ ...prev, actualStock: e.target.value }));
+                if (adjustError) setAdjustError("");
+              }}
+              className={adjustError ? "input-error" : ""}
+            />
+          </label>
+          <label>
+            <span>操作人 <span className="required-mark">*</span></span>
+            <input
+              type="text"
+              value={adjustForm.operator}
+              placeholder="操作人"
+              onChange={(e) =>
+                setAdjustForm((prev) => ({ ...prev, operator: e.target.value }))
+              }
+            />
+          </label>
+          <label>
+            <span>调整原因 <span className="required-mark">*</span></span>
+            <input
+              type="text"
+              value={adjustForm.reason}
+              placeholder="如：盘点差异、损耗修正等"
+              onChange={(e) =>
+                setAdjustForm((prev) => ({ ...prev, reason: e.target.value }))
+              }
+            />
+          </label>
+          <div className="adjust-form-actions">
+            <button className="primary-action" onClick={submitAdjust}>
+              确认调整
+            </button>
+            <button
+              className="clear-filter"
+              onClick={() => {
+                setAdjustForm({ ...emptyAdjustForm });
+                setAdjustError("");
+                setShowAdjust(false);
+              }}
+            >
+              取消
+            </button>
+          </div>
+          {adjustError && <span className="error-text op-error">{adjustError}</span>}
+        </div>
+      )}
 
       <div className="op-form">
         <label>
