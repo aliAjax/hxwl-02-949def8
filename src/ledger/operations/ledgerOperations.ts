@@ -101,12 +101,12 @@ export function applyOperation(
   const changeGrams =
     input.type === "inbound" ? input.quantity : -input.quantity;
   const auditLog = createAuditLog({
-    logType: input.type as any,
+    logType: input.type,
     herbName: batch.name,
     batchNo: batch.batchNo,
     changeGrams,
     operator: input.operator || "系统",
-    remark: input.remark || `${AUDIT_LOG_LABELS[input.type as any]} ${input.quantity}${batch.unit}`,
+    remark: input.remark || `${AUDIT_LOG_LABELS[input.type]} ${input.quantity}${batch.unit}`,
   });
   return {
     ok: true,

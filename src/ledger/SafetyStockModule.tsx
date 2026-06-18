@@ -19,6 +19,7 @@ import {
   resolveRuleThreshold,
   selectAllSafetyStockRules,
   selectTotalStockByName,
+  selectOutboundOperationsForHerb,
 } from "./store";
 import type {
   LedgerStore,
@@ -286,13 +287,12 @@ function SafetyStockModule({
 
     if (editingId) {
       const existingRule = ssState.rules[editingId];
+      const beforeHerbName = draftRuleInput.ruleType === "herb" ? draftRuleInput.target : "";
+      const beforeOutboundOps = beforeHerbName
+        ? selectOutboundOperationsForHerb(ledgerState, beforeHerbName)
+        : [];
       const beforeThreshold = existingRule
-        ? resolveRuleThreshold(
-            existingRule,
-            draftRuleInput.ruleType === "herb" ? draftRuleInput.target : "",
-            draftRuleInput.ruleType === "category" ? draftRuleInput.target : "",
-            ledgerState
-          )
+        ? resolveRuleThreshold(existingRule, { outboundOps: beforeOutboundOps })
         : 0;
       const afterThreshold = draftRuleInput.thresholdGrams;
 
@@ -465,7 +465,8 @@ function SafetyStockModule({
 
     let sampleExplanation = "";
     if (rule.ruleType === "herb") {
-      const dyn = calculateDynamicSafetyStock(ledgerState, rule.target, {
+      const outboundOps = selectOutboundOperationsForHerb(ledgerState, rule.target);
+      const dyn = calculateDynamicSafetyStock(outboundOps, {
         consumptionDays: cd,
         coverDays: cvd,
         minThresholdGrams: min,
@@ -896,12 +897,11 @@ function SafetyStockModule({
       ) : (
         <div className="ssr-list">
           {filteredRules.map((rule) => {
-            const effectiveThreshold = resolveRuleThreshold(
-              rule,
-              rule.ruleType === "herb" ? rule.target : "",
-              rule.ruleType === "category" ? rule.target : "",
-              ledgerState
-            );
+            const herbName = rule.ruleType === "herb" ? rule.target : "";
+            const outboundOps = herbName
+              ? selectOutboundOperationsForHerb(ledgerState, herbName)
+              : [];
+            const effectiveThreshold = resolveRuleThreshold(rule, { outboundOps });
             const hasLogs = ruleChangeLogs.some((l) => l.ruleId === rule.id);
             return (
               <article

@@ -33,7 +33,7 @@ export function selectSafetyStockThresholdForHerb(
   return LOW_STOCK_GRAMS;
 }
 
-function selectOutboundOperationsForHerb(
+export function selectOutboundOperationsForHerb(
   ledgerState: LedgerState,
   herbName: string
 ): typeof ledgerState["operations"] {

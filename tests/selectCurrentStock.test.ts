@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   selectCurrentStock,
   createEmptyState,
-  type LedgerState,
-  type LedgerOperationDTO,
-  type BatchLedgerDTO,
 } from "../src/ledger/store";
+import type {
+  LedgerState,
+  LedgerOperationDTO,
+  BatchLedgerDTO,
+} from "../src/ledger/types";
 
 function nowIso(): string {
   return new Date().toISOString();

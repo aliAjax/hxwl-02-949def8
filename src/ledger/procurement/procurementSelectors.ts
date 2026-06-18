@@ -6,7 +6,7 @@ import { selectSafetyStockThresholdForHerb } from "../safetyStock/lowStockSelect
 import {
   calculateProcurementSuggestion,
   sortProcurementSuggestions,
-  selectCategoryProcurementSummary as calcCategorySummary,
+  selectCategoryProcurementSummary,
 } from "./procurementCalculations";
 import type { CategoryProcurementSummary } from "./procurementCalculations";
 

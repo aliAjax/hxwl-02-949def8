@@ -63,12 +63,12 @@ function buildBatch(
       const changeGrams = m.type === "inbound" ? m.quantity : -m.quantity;
       const log: InventoryAuditLogDTO = {
         ...createBaseEntity(createId("log")),
-        logType: m.type as any,
+        logType: m.type,
         herbName: base.name,
         batchNo: base.batchNo,
         changeGrams,
         operator: m.operator,
-        remark: m.remark || `${AUDIT_LOG_LABELS[m.type as any]} ${m.quantity}${base.unit}`,
+        remark: m.remark || `${AUDIT_LOG_LABELS[m.type]} ${m.quantity}${base.unit}`,
         createdAt: m.createdAt,
         updatedAt: m.createdAt,
         syncStatus: "synced",

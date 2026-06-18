@@ -53,6 +53,17 @@ export interface BatchLedgerDTO extends BaseEntity {
   unit: string;
 }
 
+export interface LowStockHerbItem {
+  name: string;
+  category: string;
+  totalStock: number;
+  unit: string;
+  thresholdGrams: number;
+  shortageGrams: number;
+  batchCount: number;
+  batches: BatchLedgerDTO[];
+}
+
 export interface RolePreferenceRecord {
   role: "pharmacist" | "warehouse" | "manager";
   displayName?: string;

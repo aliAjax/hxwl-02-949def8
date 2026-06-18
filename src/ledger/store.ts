@@ -99,6 +99,7 @@ export {
   selectLowStockBatchesWithRules,
   selectLowStockHerbCountWithRules,
   selectLowStockHerbList,
+  selectOutboundOperationsForHerb,
 } from "./safetyStock/lowStockSelectors";
 
 export { exportLowStockListCsv } from "./safetyStock/lowStockExport";
