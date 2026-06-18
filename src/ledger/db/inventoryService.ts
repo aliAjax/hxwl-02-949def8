@@ -52,6 +52,7 @@ export class InventoryService {
         STORES.AUDIT_LOGS,
         STORES.SAFETY_STOCK_RULES,
         STORES.ROLE_PREFERENCES,
+        STORES.EXPIRY_ALERT_HANDLINGS,
         STORES.META,
       ],
       "readwrite",
@@ -74,6 +75,7 @@ export class InventoryService {
         for (const pref of seed.rolePreferences) {
           stores[STORES.ROLE_PREFERENCES].put(pref);
         }
+        stores[STORES.EXPIRY_ALERT_HANDLINGS].clear();
         stores[STORES.META].put({
           key: this.SEED_FLAG,
           value: true,
@@ -92,6 +94,7 @@ export class InventoryService {
         STORES.AUDIT_LOGS,
         STORES.SAFETY_STOCK_RULES,
         STORES.ROLE_PREFERENCES,
+        STORES.EXPIRY_ALERT_HANDLINGS,
         STORES.META,
       ],
       "readwrite",
@@ -102,6 +105,7 @@ export class InventoryService {
         stores[STORES.AUDIT_LOGS].clear();
         stores[STORES.SAFETY_STOCK_RULES].clear();
         stores[STORES.ROLE_PREFERENCES].clear();
+        stores[STORES.EXPIRY_ALERT_HANDLINGS].clear();
         stores[STORES.META].put({
           key: this.SEED_FLAG,
           value: false,

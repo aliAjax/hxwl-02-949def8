@@ -164,6 +164,7 @@ function AlertBatchCard({
   onUnmarkHandled,
 }: AlertBatchCardProps) {
   const isHandled = handling?.isHandled ?? false;
+  const isAlertBatch = level !== "normal";
   const badgeText = level === "expired"
     ? `已过期 ${Math.abs(daysLeft)} 天`
     : `剩余 ${daysLeft} 天`;
@@ -176,7 +177,7 @@ function AlertBatchCard({
           <h4>{batch.name} · {batch.spec}</h4>
         </div>
         <div className="alert-badges">
-          {isHandled && (
+          {isAlertBatch && isHandled && (
             <span className="handling-badge handled">
               ✓ 已处理
             </span>
@@ -213,7 +214,9 @@ function AlertBatchCard({
           style={{
             width: level === "expired"
               ? "100%"
-              : `${Math.max(0, Math.min(100, (1 - daysLeft / NEAR_EXPIRY_DAYS) * 100))}%`,
+              : level === "normal"
+                ? "0%"
+                : `${Math.max(0, Math.min(100, (1 - daysLeft / NEAR_EXPIRY_DAYS) * 100))}%`,
           }}
         />
       </div>
@@ -222,7 +225,7 @@ function AlertBatchCard({
         {badgeText}
       </div>
 
-      {isHandled && handling && (
+      {isAlertBatch && isHandled && handling && (
         <div className="handling-info">
           <div className="handling-info-row">
             <span className="handling-label">处理人：</span>
@@ -243,17 +246,19 @@ function AlertBatchCard({
         </div>
       )}
 
-      <div className="handling-actions">
-        {isHandled ? (
-          <button className="btn-unmark" onClick={onUnmarkHandled}>
-            撤销已处理
-          </button>
-        ) : (
-          <button className="btn-mark" onClick={onMarkHandled}>
-            标记已处理
-          </button>
-        )}
-      </div>
+      {isAlertBatch && (
+        <div className="handling-actions">
+          {isHandled ? (
+            <button className="btn-unmark" onClick={onUnmarkHandled}>
+              撤销已处理
+            </button>
+          ) : (
+            <button className="btn-mark" onClick={onMarkHandled}>
+              标记已处理
+            </button>
+          )}
+        </div>
+      )}
     </article>
   );
 }
@@ -279,18 +284,20 @@ function ExpiryAlertModule({ store }: ExpiryAlertModuleProps) {
   const grouped = useMemo(() => selectBatchesByAlertLevel(state), [state]);
   const allBatches = useMemo(() => selectAllBatches(state), [state]);
 
+  const alertBatches = useMemo(() => {
+    return allBatches.filter((b) => selectAlertLevel(b.expiry) !== "normal");
+  }, [allBatches]);
+
   const handlingCounts = useMemo(() => {
     let handled = 0;
     let pending = 0;
-    for (const batch of allBatches) {
-      const level = selectAlertLevel(batch.expiry);
-      if (level === "normal") continue;
+    for (const batch of alertBatches) {
       const h = expiryAlertHandlings[batch.id];
       if (h?.isHandled) handled++;
       else pending++;
     }
     return { handled, pending };
-  }, [allBatches, expiryAlertHandlings]);
+  }, [alertBatches, expiryAlertHandlings]);
 
   const filteredBatches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -304,6 +311,8 @@ function ExpiryAlertModule({ store }: ExpiryAlertModuleProps) {
 
     if (handlingFilter !== "all") {
       batches = batches.filter((b) => {
+        const level = selectAlertLevel(b.expiry);
+        if (level === "normal") return false;
         const h = expiryAlertHandlings[b.id];
         if (handlingFilter === "handled") return h?.isHandled ?? false;
         return !(h?.isHandled ?? false);
@@ -334,10 +343,14 @@ function ExpiryAlertModule({ store }: ExpiryAlertModuleProps) {
   const nearExpiryCount = counts.warning60 + counts.warning30 + counts.expired;
 
   const openMarkModal = (batch: BatchLedgerDTO) => {
+    const level = selectAlertLevel(batch.expiry);
+    if (level === "normal") return;
     setModalState({ open: true, batch, mode: "mark" });
   };
 
   const openUnmarkModal = (batch: BatchLedgerDTO) => {
+    const level = selectAlertLevel(batch.expiry);
+    if (level === "normal") return;
     setModalState({ open: true, batch, mode: "unmark" });
   };
 
@@ -348,6 +361,11 @@ function ExpiryAlertModule({ store }: ExpiryAlertModuleProps) {
   const handleConfirm = async (params: { handledBy: string; remark: string }) => {
     if (!modalState.open || !modalState.batch) return;
     const { batch, mode } = modalState;
+    const level = selectAlertLevel(batch.expiry);
+    if (level === "normal") {
+      closeModal();
+      return;
+    }
     if (mode === "mark") {
       await markExpiryAlertHandled({
         batchId: batch.id,
