@@ -2,7 +2,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5102",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 5102"
+    "preview": "vite preview --host 0.0.0.0 --port 5102",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
@@ -13,6 +15,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3"
+    "@types/react-dom": "^19.2.3",
+    "vitest": "^3.0.0"
   }
 }
