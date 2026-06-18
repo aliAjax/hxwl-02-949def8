@@ -12,6 +12,8 @@ import {
   OperationType,
   SafetyStockState,
 } from "./types";
+import HerbAutocomplete from "./HerbAutocomplete";
+import type { HerbSuggestion } from "./HerbAutocomplete";
 import {
   checkBatchNoExists,
   daysUntilExpiry,
@@ -87,7 +89,8 @@ interface LedgerModuleProps {
 }
 
 function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
-  const { state, addBatch, recordOperation } = store;
+  const { state, addBatch, recordOperation, inventoryStore } = store;
+  const { herbs } = inventoryStore;
   const [showForm, setShowForm] = useState(false);
   const [batchForm, setBatchForm] = useState({ ...emptyBatchForm });
   const [batchErrors, setBatchErrors] = useState<Record<string, string>>({});
@@ -165,6 +168,24 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
     }
   };
 
+  const handleHerbSelect = (suggestion: HerbSuggestion) => {
+    setBatchForm((prev) => ({
+      ...prev,
+      name: suggestion.name,
+      spec: suggestion.spec,
+      origin: suggestion.origin,
+      category: suggestion.category,
+      unit: suggestion.unit,
+    }));
+    setBatchErrors((prev) => {
+      const next = { ...prev };
+      ["name", "spec", "origin", "category", "unit"].forEach((key) => {
+        delete next[key];
+      });
+      return next;
+    });
+  };
+
   const validateBatchForm = (): boolean => {
     const next: Record<string, string> = {};
     batchFields.forEach((f) => {
@@ -233,39 +254,57 @@ function LedgerModule({ store, safetyStockState }: LedgerModuleProps) {
       {showForm && (
         <div className="batch-form">
           <div className="field-grid">
-            {batchFields.map((f) => (
-              <label key={f.key}>
-                <span>
-                  {f.label}
-                  {f.required && <span className="required-mark">*</span>}
-                </span>
-                {f.type === "select" ? (
-                  <select
+            {batchFields.map((f) => {
+              if (f.key === "name") {
+                return (
+                  <HerbAutocomplete
+                    key={f.key}
                     value={batchForm[f.key]}
-                    onChange={(e) => handleBatchField(f.key, e.target.value)}
-                    className={batchErrors[f.key] ? "input-error" : ""}
-                  >
-                    <option value="">选择{f.label}</option>
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={f.type}
-                    value={batchForm[f.key]}
+                    onChange={(value) => handleBatchField(f.key, value)}
+                    onSelect={handleHerbSelect}
+                    herbs={herbs}
+                    batches={batches}
                     placeholder={`填写${f.label}`}
-                    onChange={(e) => handleBatchField(f.key, e.target.value)}
-                    className={batchErrors[f.key] ? "input-error" : ""}
+                    error={batchErrors[f.key]}
+                    required={f.required}
+                    label={f.label}
                   />
-                )}
-                {batchErrors[f.key] && (
-                  <span className="error-text">{batchErrors[f.key]}</span>
-                )}
-              </label>
-            ))}
+                );
+              }
+              return (
+                <label key={f.key}>
+                  <span>
+                    {f.label}
+                    {f.required && <span className="required-mark">*</span>}
+                  </span>
+                  {f.type === "select" ? (
+                    <select
+                      value={batchForm[f.key]}
+                      onChange={(e) => handleBatchField(f.key, e.target.value)}
+                      className={batchErrors[f.key] ? "input-error" : ""}
+                    >
+                      <option value="">选择{f.label}</option>
+                      {CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={f.type}
+                      value={batchForm[f.key]}
+                      placeholder={`填写${f.label}`}
+                      onChange={(e) => handleBatchField(f.key, e.target.value)}
+                      className={batchErrors[f.key] ? "input-error" : ""}
+                    />
+                  )}
+                  {batchErrors[f.key] && (
+                    <span className="error-text">{batchErrors[f.key]}</span>
+                  )}
+                </label>
+              );
+            })}
           </div>
           <div className="batch-form-actions">
             <button className="primary-action" onClick={submitBatch}>

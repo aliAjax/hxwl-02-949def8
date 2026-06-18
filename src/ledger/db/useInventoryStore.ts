@@ -3,6 +3,7 @@ import {
   AuditLogRepository,
   BatchRepository,
   ExpiryAlertHandlingRepository,
+  HerbRepository,
   OperationRepository,
   RolePreferenceRepository,
   SafetyStockRuleRepository,
@@ -13,6 +14,7 @@ import { inventoryDB } from "./database";
 import type {
   AuditLogRecord,
   BatchRecord,
+  HerbRecord,
   OperationRecord,
   RolePreferenceRecord,
   SafetyStockRuleRecord,
@@ -101,24 +103,28 @@ export function useInventoryStore() {
     Record<string, ExpiryAlertHandling>
   >({});
 
+  const [herbs, setHerbs] = useState<HerbRecord[]>([]);
+
   const clearWriteError = useCallback(() => {
     setStoreState((prev) => ({ ...prev, writeError: null }));
   }, []);
 
   const refreshAll = useCallback(async () => {
     try {
-      const [batches, operations, auditLogs, rules, prefs, handlings] = await Promise.all([
+      const [batches, operations, auditLogs, rules, prefs, handlings, herbsData] = await Promise.all([
         BatchRepository.getAllSorted(),
         OperationRepository.getAll(),
         AuditLogRepository.getAll(),
         SafetyStockRuleRepository.getAll(),
         RolePreferenceRepository.getAll(),
         ExpiryAlertHandlingRepository.getAllAsMap(),
+        HerbRepository.getAll(),
       ]);
       setLedgerState(buildLedgerState(batches, operations, auditLogs, 1));
       setSafetyStockState(buildSafetyStockState(rules, 1));
       setRolePreferences(prefs);
       setExpiryAlertHandlings(handlings);
+      setHerbs(herbsData);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "加载数据失败";
       setStoreState((prev) => ({ ...prev, dbError: msg }));
@@ -541,6 +547,7 @@ export function useInventoryStore() {
     safetyStockState,
     rolePreferences,
     expiryAlertHandlings,
+    herbs,
     clearWriteError,
     refreshAll,
     addBatch,

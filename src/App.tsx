@@ -7,6 +7,8 @@ import LowStockModule from "./ledger/LowStockModule";
 import ProcurementSuggestionModule from "./ledger/ProcurementSuggestionModule";
 import RestockSuggestionPage from "./ledger/RestockSuggestionPage";
 import RoleWorkspaceModule from "./ledger/RoleWorkspaceModule";
+import HerbAutocomplete from "./ledger/HerbAutocomplete";
+import type { HerbSuggestion } from "./ledger/HerbAutocomplete";
 import {
   checkBatchNoExists,
   selectAllBatches,
@@ -162,7 +164,7 @@ function App() {
   const safetyStockStore = useSafetyStockStore();
   const { state: safetyStockState } = safetyStockStore;
 
-  const { storeState: invStoreState, clearWriteError, resetAll, exportSnapshot } =
+  const { storeState: invStoreState, clearWriteError, resetAll, exportSnapshot, herbs } =
     ledgerStore.inventoryStore;
 
   const lowStockHerbCount = useMemo(
@@ -221,6 +223,27 @@ function App() {
       });
     }
   };
+
+  const handleHerbSelect = useCallback(
+    (suggestion: HerbSuggestion) => {
+      setFormData((prev) => ({
+        ...prev,
+        name: suggestion.name,
+        spec: suggestion.spec,
+        origin: suggestion.origin,
+        category: suggestion.category,
+      }));
+      ["name", "spec", "origin", "category"].forEach((key) => {
+        setErrors((prev) => {
+          if (!prev[key]) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      });
+    },
+    []
+  );
 
   const validate = (): boolean => {
     const nextErrors: Record<string, string> = {};
@@ -536,24 +559,42 @@ function App() {
             <button className="primary-action" onClick={handleSubmit}>提交记录</button>
           </div>
           <div className="field-grid">
-            {project.fields.map((field) => (
-              <label key={field.key}>
-                <span>
-                  {field.label}
-                  {!optionalEntryFields.has(field.key) && (
-                    <span className="required-mark">*</span>
-                  )}
-                </span>
-                <input
-                  type={field.key === "expiry" ? "date" : field.key === "stockGrams" ? "number" : "text"}
-                  value={formData[field.key]}
-                  placeholder={`填写${field.label}`}
-                  onChange={(e) => handleChange(field.key, e.target.value)}
-                  className={errors[field.key] ? "input-error" : ""}
-                />
-                {errors[field.key] && <span className="error-text">{errors[field.key]}</span>}
-              </label>
-            ))}
+            {project.fields.map((field) => {
+              if (field.key === "name") {
+                return (
+                  <HerbAutocomplete
+                    key={field.key}
+                    value={formData[field.key]}
+                    onChange={(value) => handleChange(field.key, value)}
+                    onSelect={handleHerbSelect}
+                    herbs={herbs}
+                    batches={selectAllBatches(ledgerState)}
+                    placeholder={`填写${field.label}`}
+                    error={errors[field.key]}
+                    required={!optionalEntryFields.has(field.key)}
+                    label={field.label}
+                  />
+                );
+              }
+              return (
+                <label key={field.key}>
+                  <span>
+                    {field.label}
+                    {!optionalEntryFields.has(field.key) && (
+                      <span className="required-mark">*</span>
+                    )}
+                  </span>
+                  <input
+                    type={field.key === "expiry" ? "date" : field.key === "stockGrams" ? "number" : "text"}
+                    value={formData[field.key]}
+                    placeholder={`填写${field.label}`}
+                    onChange={(e) => handleChange(field.key, e.target.value)}
+                    className={errors[field.key] ? "input-error" : ""}
+                  />
+                  {errors[field.key] && <span className="error-text">{errors[field.key]}</span>}
+                </label>
+              );
+            })}
           </div>
         </section>
       </section>
