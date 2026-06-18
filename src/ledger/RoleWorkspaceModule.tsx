@@ -68,6 +68,7 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
     updateWarehouseOpType,
     updateManagerSortBy,
     updateSelectedCategory,
+    addPreferredFilter,
   } = inventoryStore;
 
   const [currentRole, setCurrentRoleState] = useState<RoleType>(
@@ -315,6 +316,7 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
           onQuickLoss={handleQuickLoss}
           currentRole={currentRole}
           updateWarehouseOpType={updateWarehouseOpType}
+          addPreferredFilter={addPreferredFilter}
           rolePreference={selectRolePreference(currentRole)}
         />
       )}
@@ -334,6 +336,7 @@ function RoleWorkspaceModule({ ledgerStore, safetyStockStore }: RoleWorkspaceMod
           currentRole={currentRole}
           updateManagerSortBy={updateManagerSortBy}
           updateSelectedCategory={updateSelectedCategory}
+          addPreferredFilter={addPreferredFilter}
           rolePreference={selectRolePreference(currentRole)}
         />
       )}
@@ -619,6 +622,11 @@ interface WarehouseViewProps {
     role: RolePreferenceRecord["role"],
     opType: "inbound" | "outbound" | "loss"
   ) => Promise<any>;
+  addPreferredFilter: (
+    role: RolePreferenceRecord["role"],
+    filter: string,
+    maxItems?: number
+  ) => Promise<any>;
   rolePreference?: RolePreferenceRecord;
 }
 
@@ -633,18 +641,28 @@ function WarehouseView({
   onQuickLoss,
   currentRole,
   updateWarehouseOpType,
+  addPreferredFilter,
   rolePreference,
 }: WarehouseViewProps) {
   const [opType, setOpTypeState] = useState<OperationType>(
     rolePreference?.warehouseOpType || "inbound"
   );
 
+  useEffect(() => {
+    if (rolePreference?.warehouseOpType) {
+      setOpTypeState(rolePreference.warehouseOpType as OperationType);
+    }
+  }, [rolePreference?.warehouseOpType]);
+
   const setOpType = useCallback(
     (type: OperationType) => {
       setOpTypeState(type);
-      void updateWarehouseOpType(currentRole, type);
+      void (async () => {
+        await updateWarehouseOpType(currentRole, type);
+        await addPreferredFilter(currentRole, OPERATION_LABELS[type], 10);
+      })();
     },
-    [updateWarehouseOpType, currentRole]
+    [updateWarehouseOpType, addPreferredFilter, currentRole]
   );
 
   const recentOperations = useMemo(() => {
@@ -709,6 +727,29 @@ function WarehouseView({
               损耗
             </button>
           </div>
+          {rolePreference?.preferredFilters &&
+            rolePreference.preferredFilters.length > 0 && (
+              <div className="recent-searches">
+                <span className="recent-label">常用操作：</span>
+                {rolePreference.preferredFilters.map((s: string, i: number) => (
+                  <button
+                    key={`${s}-${i}`}
+                    className="recent-chip"
+                    onClick={() => {
+                      const typeMap: Record<string, OperationType> = {
+                        "入库": "inbound",
+                        "出库": "outbound",
+                        "损耗": "loss",
+                      };
+                      const type = typeMap[s];
+                      if (type) setOpType(type);
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           <div className="role-lowstock-list">
             {lowStockList.length === 0 ? (
               <div className="role-empty">
@@ -845,6 +886,11 @@ interface ManagerViewProps {
     role: RolePreferenceRecord["role"],
     category: string
   ) => Promise<any>;
+  addPreferredFilter: (
+    role: RolePreferenceRecord["role"],
+    filter: string,
+    maxItems?: number
+  ) => Promise<any>;
   rolePreference?: RolePreferenceRecord;
 }
 
@@ -862,6 +908,7 @@ function ManagerView({
   currentRole,
   updateManagerSortBy,
   updateSelectedCategory,
+  addPreferredFilter,
   rolePreference,
 }: ManagerViewProps) {
   const [sortBy, setSortByState] = useState<"stock" | "batchCount" | "name">(
@@ -870,6 +917,18 @@ function ManagerView({
   const [selectedCategory, setSelectedCategoryState] = useState<string>(
     rolePreference?.selectedCategory || "all"
   );
+
+  useEffect(() => {
+    if (rolePreference?.managerSortBy) {
+      setSortByState(rolePreference.managerSortBy as "stock" | "batchCount" | "name");
+    }
+  }, [rolePreference?.managerSortBy]);
+
+  useEffect(() => {
+    if (rolePreference?.selectedCategory) {
+      setSelectedCategoryState(rolePreference.selectedCategory);
+    }
+  }, [rolePreference?.selectedCategory]);
 
   const setSortBy = useCallback(
     (sort: "stock" | "batchCount" | "name") => {
@@ -882,9 +941,14 @@ function ManagerView({
   const setSelectedCategory = useCallback(
     (cat: string) => {
       setSelectedCategoryState(cat);
-      void updateSelectedCategory(currentRole, cat);
+      void (async () => {
+        await updateSelectedCategory(currentRole, cat);
+        if (cat !== "all") {
+          await addPreferredFilter(currentRole, cat, 10);
+        }
+      })();
     },
-    [updateSelectedCategory, currentRole]
+    [updateSelectedCategory, addPreferredFilter, currentRole]
   );
 
   const totalStockValue = useMemo(
@@ -1066,6 +1130,21 @@ function ManagerView({
               </button>
             ))}
           </div>
+          {rolePreference?.preferredFilters &&
+            rolePreference.preferredFilters.length > 0 && (
+              <div className="recent-searches">
+                <span className="recent-label">常用分类：</span>
+                {rolePreference.preferredFilters.map((s: string, i: number) => (
+                  <button
+                    key={`${s}-${i}`}
+                    className="recent-chip"
+                    onClick={() => setSelectedCategory(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           <div className="herb-ranking-list">
             {sortedHerbs.map((item, index) => (
               <div key={item.name} className="herb-ranking-item">

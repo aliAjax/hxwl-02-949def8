@@ -251,6 +251,7 @@ export function fillRolePreferenceDefaults(
     preferredFilters: raw.preferredFilters ?? [],
     warehouseOpType: raw.warehouseOpType ?? "inbound",
     managerSortBy: raw.managerSortBy ?? "stock",
+    selectedCategory: raw.selectedCategory ?? "all",
   } as RolePreferenceRecord;
 }
 

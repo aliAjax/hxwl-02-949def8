@@ -390,6 +390,46 @@ export function useInventoryStore() {
     [clearWriteError]
   );
 
+  const addPreferredFilter = useCallback(
+    async (
+      role: RolePreferenceRecord["role"],
+      filter: string,
+      maxItems = 10
+    ): Promise<WriteResult<RolePreferenceRecord>> => {
+      clearWriteError();
+      const result = await RolePreferenceRepository.addPreferredFilter(
+        role,
+        filter,
+        maxItems
+      );
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "常用筛选保存失败",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
+  const clearPreferredFilters = useCallback(
+    async (
+      role: RolePreferenceRecord["role"]
+    ): Promise<WriteResult<RolePreferenceRecord>> => {
+      clearWriteError();
+      const result = await RolePreferenceRepository.clearPreferredFilters(role);
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "常用筛选清除失败",
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
   const selectRolePreference = useCallback(
     (role: RolePreferenceRecord["role"]): RolePreferenceRecord | undefined => {
       return rolePreferences.find((p) => p.role === role);
@@ -457,6 +497,8 @@ export function useInventoryStore() {
     updateWarehouseOpType,
     updateManagerSortBy,
     updateSelectedCategory,
+    addPreferredFilter,
+    clearPreferredFilters,
     selectRolePreference,
     selectCurrentRoleOrDefault,
     resetAll,

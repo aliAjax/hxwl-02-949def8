@@ -635,4 +635,34 @@ export class RolePreferenceRepository {
     };
     return this.upsert({ ...existing, selectedCategory: category });
   }
+
+  static async addPreferredFilter(
+    role: RolePreferenceRecord["role"],
+    filter: string,
+    maxItems = 10
+  ): Promise<WriteResult<RolePreferenceRecord>> {
+    if (!filter || !filter.trim()) {
+      return { ok: false, error: "筛选内容不能为空", errorType: "constraint" };
+    }
+    const existing = (await this.getByRole(role)) || {
+      role,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    const filters = [filter.trim(), ...(existing.preferredFilters || [])]
+      .filter((v, i, arr) => arr.indexOf(v) === i)
+      .slice(0, maxItems);
+    return this.upsert({ ...existing, preferredFilters: filters });
+  }
+
+  static async clearPreferredFilters(
+    role: RolePreferenceRecord["role"]
+  ): Promise<WriteResult<RolePreferenceRecord>> {
+    const existing = (await this.getByRole(role)) || {
+      role,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    return this.upsert({ ...existing, preferredFilters: [] });
+  }
 }
