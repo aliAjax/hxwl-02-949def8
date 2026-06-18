@@ -1,5 +1,5 @@
 export const DB_NAME = "hxwl_inventory_db";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const STORES = {
   HERBS: "herbs",
@@ -9,6 +9,7 @@ export const STORES = {
   SAFETY_STOCK_RULES: "safety_stock_rules",
   ROLE_PREFERENCES: "role_preferences",
   META: "meta",
+  EXPIRY_ALERT_HANDLINGS: "expiry_alert_handlings",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -107,6 +108,16 @@ export interface RolePreferenceRecord {
   updatedAt: string;
 }
 
+export interface ExpiryAlertHandlingRecord {
+  batchId: string;
+  isHandled: boolean;
+  handledAt?: string;
+  handledBy?: string;
+  remark?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MetaRecord {
   key: string;
   value: unknown;
@@ -188,6 +199,16 @@ export const DEFAULT_ROLE_PREFERENCE: Omit<RolePreferenceRecord, never> = {
   updatedAt: "",
 };
 
+export const DEFAULT_EXPIRY_ALERT_HANDLING: Omit<ExpiryAlertHandlingRecord, never> = {
+  batchId: "",
+  isHandled: false,
+  handledAt: undefined,
+  handledBy: undefined,
+  remark: undefined,
+  createdAt: "",
+  updatedAt: "",
+};
+
 export function fillHerbDefaults(raw: Partial<HerbRecord>): HerbRecord {
   return {
     ...DEFAULT_HERB,
@@ -253,6 +274,16 @@ export function fillRolePreferenceDefaults(
     managerSortBy: raw.managerSortBy ?? "stock",
     selectedCategory: raw.selectedCategory ?? "all",
   } as RolePreferenceRecord;
+}
+
+export function fillExpiryAlertHandlingDefaults(
+  raw: Partial<ExpiryAlertHandlingRecord>
+): ExpiryAlertHandlingRecord {
+  return {
+    ...DEFAULT_EXPIRY_ALERT_HANDLING,
+    ...raw,
+    isHandled: raw.isHandled ?? false,
+  } as ExpiryAlertHandlingRecord;
 }
 
 export interface IndexedDBMigration {
@@ -430,6 +461,21 @@ export const MIGRATIONS: IndexedDBMigration[] = [
               cursor.continue();
             }
           };
+        }
+      }
+    },
+  },
+  {
+    version: 3,
+    upgrade: (db, oldVersion) => {
+      if (oldVersion < 3) {
+        if (!db.objectStoreNames.contains(STORES.EXPIRY_ALERT_HANDLINGS)) {
+          const handlingStore = db.createObjectStore(STORES.EXPIRY_ALERT_HANDLINGS, {
+            keyPath: "batchId",
+          });
+          handlingStore.createIndex("isHandled", "isHandled", { unique: false });
+          handlingStore.createIndex("handledAt", "handledAt", { unique: false });
+          handlingStore.createIndex("updatedAt", "updatedAt", { unique: false });
         }
       }
     },

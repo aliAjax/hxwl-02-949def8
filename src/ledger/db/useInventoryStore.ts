@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AuditLogRepository,
   BatchRepository,
+  ExpiryAlertHandlingRepository,
   OperationRepository,
   RolePreferenceRepository,
   SafetyStockRuleRepository,
@@ -17,8 +18,10 @@ import type {
   SafetyStockRuleRecord,
 } from "./schema";
 import type {
+  ExpiryAlertHandling,
   LedgerState,
   NewBatchInput,
+  NewExpiryAlertHandlingInput,
   NewOperationInput,
   NewSafetyStockRuleInput,
   OperationResult,
@@ -94,22 +97,28 @@ export function useInventoryStore() {
     RolePreferenceRecord[]
   >([]);
 
+  const [expiryAlertHandlings, setExpiryAlertHandlings] = useState<
+    Record<string, ExpiryAlertHandling>
+  >({});
+
   const clearWriteError = useCallback(() => {
     setStoreState((prev) => ({ ...prev, writeError: null }));
   }, []);
 
   const refreshAll = useCallback(async () => {
     try {
-      const [batches, operations, auditLogs, rules, prefs] = await Promise.all([
+      const [batches, operations, auditLogs, rules, prefs, handlings] = await Promise.all([
         BatchRepository.getAllSorted(),
         OperationRepository.getAll(),
         AuditLogRepository.getAll(),
         SafetyStockRuleRepository.getAll(),
         RolePreferenceRepository.getAll(),
+        ExpiryAlertHandlingRepository.getAllAsMap(),
       ]);
       setLedgerState(buildLedgerState(batches, operations, auditLogs, 1));
       setSafetyStockState(buildSafetyStockState(rules, 1));
       setRolePreferences(prefs);
+      setExpiryAlertHandlings(handlings);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "加载数据失败";
       setStoreState((prev) => ({ ...prev, dbError: msg }));
@@ -478,11 +487,60 @@ export function useInventoryStore() {
     return InventoryService.countPendingSync();
   }, []);
 
+  const markExpiryAlertHandled = useCallback(
+    async (input: NewExpiryAlertHandlingInput): Promise<OperationResult> => {
+      clearWriteError();
+      const result = await ExpiryAlertHandlingRepository.markHandled({
+        batchId: input.batchId,
+        handledBy: input.handledBy,
+        remark: input.remark,
+      });
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "标记处理状态失败",
+        }));
+        return { ok: false, error: result.error };
+      }
+      if (result.data) {
+        setExpiryAlertHandlings((prev) => ({
+          ...prev,
+          [input.batchId]: result.data as ExpiryAlertHandling,
+        }));
+      }
+      return { ok: true };
+    },
+    [clearWriteError]
+  );
+
+  const unmarkExpiryAlertHandled = useCallback(
+    async (batchId: string): Promise<OperationResult> => {
+      clearWriteError();
+      const result = await ExpiryAlertHandlingRepository.unmarkHandled(batchId);
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error || "取消处理状态失败",
+        }));
+        return { ok: false, error: result.error };
+      }
+      if (result.data) {
+        setExpiryAlertHandlings((prev) => ({
+          ...prev,
+          [batchId]: result.data as ExpiryAlertHandling,
+        }));
+      }
+      return { ok: true };
+    },
+    [clearWriteError]
+  );
+
   return {
     storeState,
     ledgerState,
     safetyStockState,
     rolePreferences,
+    expiryAlertHandlings,
     clearWriteError,
     refreshAll,
     addBatch,
@@ -503,6 +561,8 @@ export function useInventoryStore() {
     selectCurrentRoleOrDefault,
     resetAll,
     pendingSyncCount,
+    markExpiryAlertHandled,
+    unmarkExpiryAlertHandled,
   };
 }
 

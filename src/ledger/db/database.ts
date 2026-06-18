@@ -6,12 +6,14 @@ import {
   StoreName,
   fillAuditLogDefaults,
   fillBatchDefaults,
+  fillExpiryAlertHandlingDefaults,
   fillHerbDefaults,
   fillOperationDefaults,
   fillRolePreferenceDefaults,
   fillSafetyStockRuleDefaults,
   type AuditLogRecord,
   type BatchRecord,
+  type ExpiryAlertHandlingRecord,
   type HerbRecord,
   type MetaRecord,
   type OperationRecord,
@@ -313,6 +315,7 @@ export class InventoryDatabase {
     herbs: HerbRecord[];
     safetyStockRules: SafetyStockRuleRecord[];
     rolePreferences: RolePreferenceRecord[];
+    expiryAlertHandlings: ExpiryAlertHandlingRecord[];
     meta: MetaRecord[];
   }> {
     const db = await this.open();
@@ -323,11 +326,12 @@ export class InventoryDatabase {
       STORES.HERBS,
       STORES.SAFETY_STOCK_RULES,
       STORES.ROLE_PREFERENCES,
+      STORES.EXPIRY_ALERT_HANDLINGS,
       STORES.META,
     ];
     const tx = db.transaction(storeNames, "readonly");
 
-    const [batches, operations, auditLogs, herbs, safetyStockRules, rolePreferences, meta] =
+    const [batches, operations, auditLogs, herbs, safetyStockRules, rolePreferences, expiryAlertHandlings, meta] =
       await Promise.all([
         wrapRequest(tx.objectStore(STORES.BATCHES).getAll()) as Promise<
           Partial<BatchRecord>[]
@@ -347,6 +351,9 @@ export class InventoryDatabase {
         wrapRequest(
           tx.objectStore(STORES.ROLE_PREFERENCES).getAll()
         ) as Promise<Partial<RolePreferenceRecord>[]>,
+        wrapRequest(
+          tx.objectStore(STORES.EXPIRY_ALERT_HANDLINGS).getAll()
+        ) as Promise<Partial<ExpiryAlertHandlingRecord>[]>,
         wrapRequest(tx.objectStore(STORES.META).getAll()) as Promise<
           MetaRecord[]
         >,
@@ -361,6 +368,7 @@ export class InventoryDatabase {
       herbs: herbs.map(fillHerbDefaults),
       safetyStockRules: safetyStockRules.map(fillSafetyStockRuleDefaults),
       rolePreferences: rolePreferences.map(fillRolePreferenceDefaults),
+      expiryAlertHandlings: expiryAlertHandlings.map(fillExpiryAlertHandlingDefaults),
       meta,
     };
   }

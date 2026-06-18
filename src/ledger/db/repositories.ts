@@ -3,12 +3,14 @@ import {
   STORES,
   fillAuditLogDefaults,
   fillBatchDefaults,
+  fillExpiryAlertHandlingDefaults,
   fillHerbDefaults,
   fillOperationDefaults,
   fillRolePreferenceDefaults,
   fillSafetyStockRuleDefaults,
   type AuditLogRecord,
   type BatchRecord,
+  type ExpiryAlertHandlingRecord,
   type HerbRecord,
   type OperationRecord,
   type RolePreferenceRecord,
@@ -664,5 +666,115 @@ export class RolePreferenceRepository {
       updatedAt: nowIso(),
     };
     return this.upsert({ ...existing, preferredFilters: [] });
+  }
+}
+
+export class ExpiryAlertHandlingRepository {
+  static async getAll(): Promise<ExpiryAlertHandlingRecord[]> {
+    const raw = await inventoryDB.getAll<Partial<ExpiryAlertHandlingRecord>>(
+      STORES.EXPIRY_ALERT_HANDLINGS
+    );
+    return raw.map(fillExpiryAlertHandlingDefaults);
+  }
+
+  static async getAllAsMap(): Promise<Record<string, ExpiryAlertHandlingRecord>> {
+    const all = await this.getAll();
+    const map: Record<string, ExpiryAlertHandlingRecord> = {};
+    for (const h of all) {
+      map[h.batchId] = h;
+    }
+    return map;
+  }
+
+  static async getByBatchId(
+    batchId: string
+  ): Promise<ExpiryAlertHandlingRecord | undefined> {
+    const raw = await inventoryDB.getByKey<Partial<ExpiryAlertHandlingRecord>>(
+      STORES.EXPIRY_ALERT_HANDLINGS,
+      batchId
+    );
+    if (!raw) return undefined;
+    return fillExpiryAlertHandlingDefaults(raw);
+  }
+
+  static async markHandled(params: {
+    batchId: string;
+    handledBy?: string;
+    remark?: string;
+  }): Promise<WriteResult<ExpiryAlertHandlingRecord>> {
+    const now = nowIso();
+    const existing = await this.getByBatchId(params.batchId);
+    const record: ExpiryAlertHandlingRecord = fillExpiryAlertHandlingDefaults({
+      ...existing,
+      batchId: params.batchId,
+      isHandled: true,
+      handledAt: now,
+      handledBy: params.handledBy || existing?.handledBy,
+      remark: params.remark ?? existing?.remark,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    });
+    try {
+      await inventoryDB.put(STORES.EXPIRY_ALERT_HANDLINGS, record);
+      return { ok: true, data: record };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async unmarkHandled(
+    batchId: string
+  ): Promise<WriteResult<ExpiryAlertHandlingRecord>> {
+    const now = nowIso();
+    const existing = await this.getByBatchId(batchId);
+    if (!existing) {
+      return { ok: false, error: "处理记录不存在", errorType: "database" };
+    }
+    const record: ExpiryAlertHandlingRecord = fillExpiryAlertHandlingDefaults({
+      ...existing,
+      isHandled: false,
+      handledAt: undefined,
+      handledBy: undefined,
+      updatedAt: now,
+    });
+    try {
+      await inventoryDB.put(STORES.EXPIRY_ALERT_HANDLINGS, record);
+      return { ok: true, data: record };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async upsert(
+    data: Partial<ExpiryAlertHandlingRecord> & { batchId: string }
+  ): Promise<WriteResult<ExpiryAlertHandlingRecord>> {
+    const now = nowIso();
+    const existing = await this.getByBatchId(data.batchId);
+    const record: ExpiryAlertHandlingRecord = fillExpiryAlertHandlingDefaults({
+      ...existing,
+      ...data,
+      batchId: data.batchId,
+      createdAt: existing?.createdAt || data.createdAt || now,
+      updatedAt: now,
+    });
+    try {
+      await inventoryDB.put(STORES.EXPIRY_ALERT_HANDLINGS, record);
+      return { ok: true, data: record };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async delete(batchId: string): Promise<WriteResult<void>> {
+    try {
+      await inventoryDB.delete(STORES.EXPIRY_ALERT_HANDLINGS, batchId);
+      return { ok: true };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
   }
 }

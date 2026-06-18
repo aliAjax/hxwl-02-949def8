@@ -210,3 +210,19 @@ export interface CategoryProcurementSummary {
   mediumCount: number;
   lowCount: number;
 }
+
+export interface ExpiryAlertHandling {
+  batchId: string;
+  isHandled: boolean;
+  handledAt?: string;
+  handledBy?: string;
+  remark?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewExpiryAlertHandlingInput {
+  batchId: string;
+  handledBy?: string;
+  remark?: string;
+}
