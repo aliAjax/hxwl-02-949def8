@@ -2,9 +2,11 @@ import { inventoryDB } from "./database";
 import {
   AuditLogRepository,
   BatchRepository,
+  ExpiryAlertHandlingRepository,
   HerbRepository,
   OperationRepository,
   SafetyStockRuleRepository,
+  SafetyStockRuleChangeLogRepository,
   createId,
   nowIso,
   type WriteResult,
@@ -610,8 +612,72 @@ export class InventoryService {
     }
   }
 
+  static async recordSafetyStockRuleChange(params: {
+    ruleId: string;
+    ruleName: string;
+    action: "create" | "update" | "delete" | "migrate";
+    operator: string;
+    before?: Partial<import("../types").SafetyStockRuleDTO>;
+    after?: Partial<import("../types").SafetyStockRuleDTO>;
+    affectedHerbCount: number;
+    lowStockBeforeCount: number;
+    lowStockAfterCount: number;
+    suggestionDeltaTotal: number;
+    remark?: string;
+  }): Promise<WriteResult<void>> {
+    return SafetyStockRuleChangeLogRepository.upsert({
+      ruleId: params.ruleId,
+      ruleName: params.ruleName,
+      action: params.action,
+      operator: params.operator || "系统",
+      beforeJson: params.before ? JSON.stringify(params.before) : undefined,
+      afterJson: params.after ? JSON.stringify(params.after) : undefined,
+      affectedHerbCount: params.affectedHerbCount,
+      lowStockBeforeCount: params.lowStockBeforeCount,
+      lowStockAfterCount: params.lowStockAfterCount,
+      suggestionDeltaTotal: params.suggestionDeltaTotal,
+      remark: params.remark,
+    }).then((res) => ({
+      ok: res.ok,
+      error: res.error,
+      errorType: res.errorType,
+    }));
+  }
+
+  static async getSafetyStockRuleChangeLogs(
+    ruleId?: string
+  ): Promise<import("../types").SafetyStockRuleChangeLogDTO[]> {
+    const records = ruleId
+      ? await SafetyStockRuleChangeLogRepository.getByRuleId(ruleId)
+      : await SafetyStockRuleChangeLogRepository.getAll();
+
+    return records.map((r) => ({
+      id: r.id,
+      ruleId: r.ruleId,
+      ruleName: r.ruleName,
+      action: r.action,
+      operator: r.operator,
+      before: r.beforeJson ? JSON.parse(r.beforeJson) : undefined,
+      after: r.afterJson ? JSON.parse(r.afterJson) : undefined,
+      affectedHerbCount: r.affectedHerbCount,
+      lowStockBeforeCount: r.lowStockBeforeCount,
+      lowStockAfterCount: r.lowStockAfterCount,
+      suggestionDeltaTotal: r.suggestionDeltaTotal,
+      remark: r.remark,
+      createdAt: r.createdAt,
+    }));
+  }
+
   static async createSafetyStockRule(
-    input: NewSafetyStockRuleInput
+    input: NewSafetyStockRuleInput & {
+      operator?: string;
+      previewData?: {
+        affectedHerbCount: number;
+        lowStockBeforeCount: number;
+        lowStockAfterCount: number;
+        suggestionDeltaTotal: number;
+      };
+    }
   ): Promise<WriteResult<string>> {
     const exists = await SafetyStockRuleRepository.existsByName(input.name);
     if (exists) {
@@ -621,17 +687,50 @@ export class InventoryService {
         errorType: "constraint",
       };
     }
-    return SafetyStockRuleRepository.upsert(input).then((res) => ({
-      ok: res.ok,
-      data: res.data?.id,
-      error: res.error,
-      errorType: res.errorType,
-    }));
+    const result = await SafetyStockRuleRepository.upsert(input);
+    if (!result.ok || !result.data) {
+      return {
+        ok: false,
+        error: result.error,
+        errorType: result.errorType,
+      };
+    }
+
+    if (input.previewData) {
+      await this.recordSafetyStockRuleChange({
+        ruleId: result.data.id,
+        ruleName: input.name,
+        action: "create",
+        operator: input.operator || "系统",
+        after: {
+          ruleType: input.ruleType,
+          target: input.target,
+          calcMode: input.calcMode,
+          thresholdGrams: input.thresholdGrams,
+          consumptionDays: input.consumptionDays,
+          coverDays: input.coverDays,
+          minThresholdGrams: input.minThresholdGrams,
+        },
+        ...input.previewData,
+        remark: `创建规则「${input.name}」`,
+      });
+    }
+
+    return { ok: true, data: result.data.id };
   }
 
   static async updateSafetyStockRule(
     ruleId: string,
-    input: Partial<NewSafetyStockRuleInput>
+    input: Partial<NewSafetyStockRuleInput> & {
+      operator?: string;
+      existingRule?: Partial<import("../types").SafetyStockRuleDTO>;
+      previewData?: {
+        affectedHerbCount: number;
+        lowStockBeforeCount: number;
+        lowStockAfterCount: number;
+        suggestionDeltaTotal: number;
+      };
+    }
   ): Promise<WriteResult<void>> {
     if (input.name) {
       const exists = await SafetyStockRuleRepository.existsByName(
@@ -646,17 +745,89 @@ export class InventoryService {
         };
       }
     }
-    return SafetyStockRuleRepository.upsert({ id: ruleId, ...input }).then(
-      (res) => ({
-        ok: res.ok,
-        error: res.error,
-        errorType: res.errorType,
-      })
-    );
+    const result = await SafetyStockRuleRepository.upsert({ id: ruleId, ...input });
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error,
+        errorType: result.errorType,
+      };
+    }
+
+    if (input.previewData && input.existingRule) {
+      await this.recordSafetyStockRuleChange({
+        ruleId,
+        ruleName: input.name || input.existingRule.name || "未知规则",
+        action: "update",
+        operator: input.operator || "系统",
+        before: {
+          name: input.existingRule.name,
+          ruleType: input.existingRule.ruleType,
+          target: input.existingRule.target,
+          calcMode: input.existingRule.calcMode,
+          thresholdGrams: input.existingRule.thresholdGrams,
+          consumptionDays: input.existingRule.consumptionDays,
+          coverDays: input.existingRule.coverDays,
+          minThresholdGrams: input.existingRule.minThresholdGrams,
+        },
+        after: {
+          ...(input.name ? { name: input.name } : {}),
+          ...(input.ruleType ? { ruleType: input.ruleType } : {}),
+          ...(input.target ? { target: input.target } : {}),
+          ...(input.calcMode ? { calcMode: input.calcMode } : {}),
+          ...(input.thresholdGrams !== undefined ? { thresholdGrams: input.thresholdGrams } : {}),
+          ...(input.consumptionDays !== undefined ? { consumptionDays: input.consumptionDays } : {}),
+          ...(input.coverDays !== undefined ? { coverDays: input.coverDays } : {}),
+          ...(input.minThresholdGrams !== undefined ? { minThresholdGrams: input.minThresholdGrams } : {}),
+        },
+        ...input.previewData,
+        remark: `更新规则「${input.name || input.existingRule.name}」`,
+      });
+    }
+
+    return { ok: true };
   }
 
-  static async deleteSafetyStockRule(ruleId: string): Promise<WriteResult<void>> {
-    return SafetyStockRuleRepository.softDelete(ruleId);
+  static async deleteSafetyStockRule(
+    ruleId: string,
+    options?: {
+      operator?: string;
+      existingRule?: Partial<import("../types").SafetyStockRuleDTO>;
+      previewData?: {
+        affectedHerbCount: number;
+        lowStockBeforeCount: number;
+        lowStockAfterCount: number;
+        suggestionDeltaTotal: number;
+      };
+    }
+  ): Promise<WriteResult<void>> {
+    const result = await SafetyStockRuleRepository.softDelete(ruleId);
+    if (!result.ok) {
+      return result;
+    }
+
+    if (options?.previewData && options?.existingRule) {
+      await this.recordSafetyStockRuleChange({
+        ruleId,
+        ruleName: options.existingRule.name || "未知规则",
+        action: "delete",
+        operator: options.operator || "系统",
+        before: {
+          name: options.existingRule.name,
+          ruleType: options.existingRule.ruleType,
+          target: options.existingRule.target,
+          calcMode: options.existingRule.calcMode,
+          thresholdGrams: options.existingRule.thresholdGrams,
+          consumptionDays: options.existingRule.consumptionDays,
+          coverDays: options.existingRule.coverDays,
+          minThresholdGrams: options.existingRule.minThresholdGrams,
+        },
+        ...options.previewData,
+        remark: `删除规则「${options.existingRule.name}」`,
+      });
+    }
+
+    return { ok: true };
   }
 
   static async exportConsistentSnapshot(): Promise<ExportData> {

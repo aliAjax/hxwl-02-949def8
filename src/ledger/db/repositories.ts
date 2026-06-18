@@ -8,6 +8,7 @@ import {
   fillOperationDefaults,
   fillRolePreferenceDefaults,
   fillSafetyStockRuleDefaults,
+  fillSafetyStockRuleChangeLogDefaults,
   type AuditLogRecord,
   type BatchRecord,
   type ExpiryAlertHandlingRecord,
@@ -15,6 +16,7 @@ import {
   type OperationRecord,
   type RolePreferenceRecord,
   type SafetyStockRuleRecord,
+  type SafetyStockRuleChangeLogRecord,
 } from "./schema";
 
 export type { DatabaseError, ConstraintError };
@@ -807,6 +809,56 @@ export class SafetyStockRuleRepository {
     return this.upsert({ ...existing, isDeleted: true }).then(() => ({
       ok: true,
     }));
+  }
+}
+
+export class SafetyStockRuleChangeLogRepository {
+  static async getAll(): Promise<SafetyStockRuleChangeLogRecord[]> {
+    const raw = await inventoryDB.getAll<Partial<SafetyStockRuleChangeLogRecord>>(
+      STORES.SAFETY_STOCK_RULE_CHANGE_LOGS
+    );
+    return raw
+      .map(fillSafetyStockRuleChangeLogDefaults)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+
+  static async getByRuleId(
+    ruleId: string
+  ): Promise<SafetyStockRuleChangeLogRecord[]> {
+    const raw = await inventoryDB.getByIndex<Partial<SafetyStockRuleChangeLogRecord>>(
+      STORES.SAFETY_STOCK_RULE_CHANGE_LOGS,
+      "ruleId",
+      ruleId
+    );
+    return raw
+      .map(fillSafetyStockRuleChangeLogDefaults)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+
+  static async upsert(
+    data: Partial<SafetyStockRuleChangeLogRecord>
+  ): Promise<WriteResult<SafetyStockRuleChangeLogRecord>> {
+    const now = nowIso();
+    const id = data.id || createId("sscl");
+    const record: SafetyStockRuleChangeLogRecord = fillSafetyStockRuleChangeLogDefaults({
+      ...data,
+      id,
+      createdAt: data.createdAt || now,
+    });
+    try {
+      await inventoryDB.put(STORES.SAFETY_STOCK_RULE_CHANGE_LOGS, record);
+      return { ok: true, data: record };
+    } catch (e) {
+      const info = wrapDBError(e);
+      return { ok: false, ...info };
+    }
+  }
+
+  static async getRecent(
+    limit: number = 20
+  ): Promise<SafetyStockRuleChangeLogRecord[]> {
+    const all = await this.getAll();
+    return all.slice(0, limit);
   }
 }
 

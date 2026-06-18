@@ -1297,6 +1297,7 @@ export interface LedgerStore {
     safetyStockAfter: number;
     safetyStockTarget: string;
   }) => OperationResult;
+  refreshAll: () => Promise<void>;
   inventoryStore: InventoryStore;
 }
 
@@ -1310,6 +1311,7 @@ export function useLedgerStore(
     recordOperation: asyncRecordOperation,
     recordBatchAdjustment: asyncRecordBatchAdjustment,
     recordSafetyStockChange: asyncRecordSafetyStockChange,
+    refreshAll,
   } = inventoryStore;
 
   const [optimisticState, setOptimisticState] = useState<LedgerState>(state);
@@ -1408,6 +1410,7 @@ export function useLedgerStore(
     recordOperation,
     recordBatchAdjustment,
     recordSafetyStockChange,
+    refreshAll,
     inventoryStore,
   };
 }
@@ -1448,22 +1451,105 @@ export function checkSafetyStockRuleNameExists(
 export function selectSafetyStockThresholdForHerb(
   state: SafetyStockState,
   herbName: string,
-  category: string
+  category: string,
+  ledgerState?: LedgerState
 ): number {
   const rules = selectAllSafetyStockRules(state);
   const herbRule = rules.find(
     (r) => r.ruleType === "herb" && r.target === herbName
   );
   if (herbRule) {
-    return herbRule.thresholdGrams;
+    return resolveRuleThreshold(herbRule, herbName, category, ledgerState);
   }
   const categoryRule = rules.find(
     (r) => r.ruleType === "category" && r.target === category
   );
   if (categoryRule) {
-    return categoryRule.thresholdGrams;
+    return resolveRuleThreshold(categoryRule, herbName, category, ledgerState);
   }
   return LOW_STOCK_GRAMS;
+}
+
+export function resolveRuleThreshold(
+  rule: SafetyStockRuleDTO,
+  herbName: string,
+  category: string,
+  ledgerState?: LedgerState
+): number {
+  if (rule.calcMode === "fixed") {
+    return rule.thresholdGrams;
+  }
+
+  if (!ledgerState) {
+    return rule.thresholdGrams;
+  }
+
+  const consumptionDays = rule.consumptionDays ?? DEFAULT_CONSUMPTION_DAYS;
+  const coverDays = rule.coverDays ?? DEFAULT_PURCHASE_COVER_DAYS;
+  const minThreshold = rule.minThresholdGrams ?? rule.thresholdGrams ?? LOW_STOCK_GRAMS;
+
+  const outboundOps = selectOutboundOperationsForHerb(ledgerState, herbName);
+  const avgDaily = calculateAvgDailyConsumption(outboundOps, consumptionDays);
+
+  const dynamicThreshold = Math.ceil(avgDaily * coverDays);
+  return Math.max(minThreshold, dynamicThreshold);
+}
+
+export function calculateDynamicSafetyStock(
+  ledgerState: LedgerState,
+  herbName: string,
+  options: {
+    consumptionDays?: number;
+    coverDays?: number;
+    minThresholdGrams?: number;
+  } = {}
+): {
+  threshold: number;
+  avgDailyConsumption: number;
+  consumptionDays: number;
+  coverDays: number;
+  minThreshold: number;
+  explanation: string;
+} {
+  const consumptionDays = options.consumptionDays ?? DEFAULT_CONSUMPTION_DAYS;
+  const coverDays = options.coverDays ?? DEFAULT_PURCHASE_COVER_DAYS;
+  const minThreshold = options.minThresholdGrams ?? LOW_STOCK_GRAMS;
+
+  const outboundOps = selectOutboundOperationsForHerb(ledgerState, herbName);
+  const avgDaily = calculateAvgDailyConsumption(outboundOps, consumptionDays);
+
+  const dynamicValue = Math.ceil(avgDaily * coverDays);
+  const finalThreshold = Math.max(minThreshold, dynamicValue);
+
+  const explanation =
+    avgDaily > 0
+      ? `近${consumptionDays}天出库均值 ${avgDaily.toFixed(1)}g/天 × ${coverDays}天覆盖 = ${dynamicValue}g，${finalThreshold > dynamicValue ? `取最低阈值 ${minThreshold}g` : `取动态计算值`}`
+      : `近${consumptionDays}天无出库记录，取最低阈值 ${minThreshold}g`;
+
+  return {
+    threshold: finalThreshold,
+    avgDailyConsumption: Math.round(avgDaily * 100) / 100,
+    consumptionDays,
+    coverDays,
+    minThreshold,
+    explanation,
+  };
+}
+
+export function findRuleForHerb(
+  state: SafetyStockState,
+  herbName: string,
+  category: string
+): SafetyStockRuleDTO | undefined {
+  const rules = selectAllSafetyStockRules(state);
+  const herbRule = rules.find(
+    (r) => r.ruleType === "herb" && r.target === herbName
+  );
+  if (herbRule) return herbRule;
+  const categoryRule = rules.find(
+    (r) => r.ruleType === "category" && r.target === category
+  );
+  return categoryRule;
 }
 
 export function isLowStockWithRules(
@@ -1482,7 +1568,8 @@ export function selectLowStockBatchesWithRules(
     const threshold = selectSafetyStockThresholdForHerb(
       safetyStockState,
       b.name,
-      b.category
+      b.category,
+      ledgerState
     );
     return isLowStockWithRules(stock, threshold);
   });
@@ -1524,7 +1611,8 @@ export function selectLowStockHerbList(
       const threshold = selectSafetyStockThresholdForHerb(
         safetyStockState,
         batch.name,
-        batch.category
+        batch.category,
+        ledgerState
       );
       map.set(batch.name, {
         name: batch.name,
@@ -1624,7 +1712,8 @@ export function selectProcurementSuggestions(
     const threshold = selectSafetyStockThresholdForHerb(
       safetyStockState,
       herbName,
-      firstBatch.category
+      firstBatch.category,
+      ledgerState
     );
 
     let totalStock = 0;
@@ -1904,7 +1993,11 @@ export function createSafetyStockRule(
     name: input.name,
     ruleType: input.ruleType,
     target: input.target,
+    calcMode: input.calcMode,
     thresholdGrams: input.thresholdGrams,
+    consumptionDays: input.consumptionDays,
+    coverDays: input.coverDays,
+    minThresholdGrams: input.minThresholdGrams,
   };
   return {
     ruleId,
@@ -1962,6 +2055,190 @@ export function deleteSafetyStockRule(
   };
 }
 
+export function buildTemporarySafetyStockState(
+  baseState: SafetyStockState,
+  editingRuleId: string | null,
+  draftRule: NewSafetyStockRuleInput
+): SafetyStockState {
+  if (editingRuleId) {
+    const result = updateSafetyStockRule(baseState, editingRuleId, draftRule);
+    if (result.ok && result.state) {
+      return result.state;
+    }
+    return baseState;
+  }
+  const tempResult = createSafetyStockRule(baseState, draftRule);
+  return tempResult.state;
+}
+
+export function selectHerbAggregatedStockMap(
+  ledgerState: LedgerState
+): Map<string, {
+  name: string;
+  category: string;
+  unit: string;
+  totalStock: number;
+  batches: BatchLedgerDTO[];
+}> {
+  const map = new Map<string, {
+    name: string;
+    category: string;
+    unit: string;
+    totalStock: number;
+    batches: BatchLedgerDTO[];
+  }>();
+
+  for (const batch of selectAllBatches(ledgerState)) {
+    const stock = selectCurrentStock(ledgerState, batch.id);
+    const existing = map.get(batch.name);
+    if (existing) {
+      existing.totalStock += stock;
+      existing.batches.push(batch);
+    } else {
+      map.set(batch.name, {
+        name: batch.name,
+        category: batch.category,
+        unit: batch.unit,
+        totalStock: stock,
+        batches: [batch],
+      });
+    }
+  }
+  return map;
+}
+
+export function previewRuleChange(
+  ledgerState: LedgerState,
+  baseSafetyState: SafetyStockState,
+  newSafetyState: SafetyStockState,
+  draftRule: NewSafetyStockRuleInput
+): import("./types").SafetyStockRulePreviewResult {
+  const herbMap = selectHerbAggregatedStockMap(ledgerState);
+
+  const affectedHerbNames: string[] = [];
+  for (const [name, herb] of herbMap.entries()) {
+    if (draftRule.ruleType === "herb") {
+      if (name === draftRule.target) {
+        affectedHerbNames.push(name);
+      }
+    } else {
+      if (herb.category === draftRule.target) {
+        affectedHerbNames.push(name);
+      }
+    }
+  }
+
+  const affectedHerbs: import("./types").SafetyStockRulePreviewItem[] = [];
+  let totalSuggestionBefore = 0;
+  let totalSuggestionAfter = 0;
+  let avgDailySum = 0;
+
+  const baseLowStockSet = new Set<string>();
+  const newLowStockSet = new Set<string>();
+
+  const baseSuggestions = selectProcurementSuggestions(ledgerState, baseSafetyState);
+  const newSuggestions = selectProcurementSuggestions(ledgerState, newSafetyState);
+
+  const baseSuggestionMap = new Map(baseSuggestions.map(s => [s.name, s]));
+  const newSuggestionMap = new Map(newSuggestions.map(s => [s.name, s]));
+
+  for (const name of affectedHerbNames) {
+    const herb = herbMap.get(name)!;
+    const thresholdBefore = selectSafetyStockThresholdForHerb(
+      baseSafetyState,
+      name,
+      herb.category,
+      ledgerState
+    );
+    const thresholdAfter = selectSafetyStockThresholdForHerb(
+      newSafetyState,
+      name,
+      herb.category,
+      ledgerState
+    );
+
+    const isLowBefore = herb.totalStock < thresholdBefore;
+    const isLowAfter = herb.totalStock < thresholdAfter;
+
+    if (isLowBefore) baseLowStockSet.add(name);
+    if (isLowAfter) newLowStockSet.add(name);
+
+    const baseSugg = baseSuggestionMap.get(name);
+    const newSugg = newSuggestionMap.get(name);
+
+    const suggBefore = baseSugg?.suggestedPurchaseQty ?? 0;
+    const suggAfter = newSugg?.suggestedPurchaseQty ?? 0;
+    const avgDaily = baseSugg?.avgDailyConsumption ?? newSugg?.avgDailyConsumption ?? 0;
+
+    totalSuggestionBefore += suggBefore;
+    totalSuggestionAfter += suggAfter;
+    avgDailySum += avgDaily;
+
+    affectedHerbs.push({
+      name,
+      category: herb.category,
+      totalStock: herb.totalStock,
+      unit: herb.unit,
+      thresholdBefore,
+      thresholdAfter,
+      isLowStockBefore: isLowBefore,
+      isLowStockAfter: isLowAfter,
+      lowStockStatusChanged: isLowBefore !== isLowAfter,
+      suggestionBefore: suggBefore,
+      suggestionAfter: suggAfter,
+      suggestionDelta: suggAfter - suggBefore,
+      avgDailyConsumption: avgDaily,
+    });
+  }
+
+  const newlyLowStock = affectedHerbs.filter(
+    h => !h.isLowStockBefore && h.isLowStockAfter
+  );
+  const noLongerLowStock = affectedHerbs.filter(
+    h => h.isLowStockBefore && !h.isLowStockAfter
+  );
+
+  const totalLowStockBefore = baseLowStockSet.size;
+  const totalLowStockAfter = newLowStockSet.size;
+  const lowStockDelta = totalLowStockAfter - totalLowStockBefore;
+  const totalSuggestionDelta = totalSuggestionAfter - totalSuggestionBefore;
+
+  const targetLabel = draftRule.ruleType === "herb"
+    ? `饮片「${draftRule.target}」`
+    : `分类「${draftRule.target}」`;
+
+  const modeLabel = draftRule.calcMode === "fixed"
+    ? `固定阈值 ${draftRule.thresholdGrams}g`
+    : `动态规则（近${draftRule.consumptionDays ?? DEFAULT_CONSUMPTION_DAYS}天均值 × ${draftRule.coverDays ?? DEFAULT_PURCHASE_COVER_DAYS}天覆盖，最低${draftRule.minThresholdGrams ?? LOW_STOCK_GRAMS}g）`;
+
+  const changes: string[] = [];
+  if (newlyLowStock.length > 0) {
+    changes.push(`${newlyLowStock.length}种新增低库存`);
+  }
+  if (noLongerLowStock.length > 0) {
+    changes.push(`${noLongerLowStock.length}种脱离低库存`);
+  }
+  if (totalSuggestionDelta !== 0) {
+    changes.push(`补货建议${totalSuggestionDelta > 0 ? "+" : ""}${totalSuggestionDelta.toLocaleString()}g`);
+  }
+
+  const explainText = `规则「${draftRule.name}」应用于${targetLabel}，模式：${modeLabel}。影响${affectedHerbs.length}种饮片：${changes.length > 0 ? changes.join("，") : "低库存状态和补货建议无变化"}。`;
+
+  return {
+    affectedHerbs,
+    newlyLowStock,
+    noLongerLowStock,
+    totalLowStockBefore,
+    totalLowStockAfter,
+    lowStockDelta,
+    totalSuggestionBefore,
+    totalSuggestionAfter,
+    totalSuggestionDelta,
+    avgDailyConsumptionSum: Math.round(avgDailySum * 100) / 100,
+    explainText,
+  };
+}
+
 export function createSeedSafetyStockState(): SafetyStockState {
   const seedRules: SafetyStockRuleDTO[] = [
     {
@@ -1969,7 +2246,12 @@ export function createSeedSafetyStockState(): SafetyStockState {
       name: "补气类安全库存",
       ruleType: "category",
       target: "补气",
+      calcMode: "fixed",
       thresholdGrams: 1500,
+      consumptionDays: undefined,
+      coverDays: undefined,
+      minThresholdGrams: undefined,
+      migratedFromV1: false,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       syncStatus: "synced",
@@ -1979,7 +2261,12 @@ export function createSeedSafetyStockState(): SafetyStockState {
       name: "黄芪专属安全库存",
       ruleType: "herb",
       target: "黄芪",
+      calcMode: "dynamic",
       thresholdGrams: 2000,
+      consumptionDays: 30,
+      coverDays: 45,
+      minThresholdGrams: 2000,
+      migratedFromV1: false,
       createdAt: "2026-02-01T00:00:00.000Z",
       updatedAt: "2026-02-01T00:00:00.000Z",
       syncStatus: "synced",
@@ -1989,7 +2276,12 @@ export function createSeedSafetyStockState(): SafetyStockState {
       name: "清热类安全库存",
       ruleType: "category",
       target: "清热",
+      calcMode: "fixed",
       thresholdGrams: 1000,
+      consumptionDays: undefined,
+      coverDays: undefined,
+      minThresholdGrams: undefined,
+      migratedFromV1: false,
       createdAt: "2026-01-15T00:00:00.000Z",
       updatedAt: "2026-01-15T00:00:00.000Z",
       syncStatus: "synced",
@@ -2009,12 +2301,44 @@ export function createSeedSafetyStockState(): SafetyStockState {
 
 export interface SafetyStockStore {
   state: SafetyStockState;
-  addRule: (input: NewSafetyStockRuleInput) => string;
+  addRule: (
+    input: NewSafetyStockRuleInput & {
+      operator?: string;
+      previewData?: {
+        affectedHerbCount: number;
+        lowStockBeforeCount: number;
+        lowStockAfterCount: number;
+        suggestionDeltaTotal: number;
+      };
+    }
+  ) => Promise<string | null>;
   updateRule: (
     ruleId: string,
-    input: Partial<NewSafetyStockRuleInput>
-  ) => OperationResult;
-  removeRule: (ruleId: string) => OperationResult;
+    input: Partial<NewSafetyStockRuleInput> & {
+      operator?: string;
+      existingRule?: Partial<SafetyStockRuleDTO>;
+      previewData?: {
+        affectedHerbCount: number;
+        lowStockBeforeCount: number;
+        lowStockAfterCount: number;
+        suggestionDeltaTotal: number;
+      };
+    }
+  ) => Promise<OperationResult>;
+  removeRule: (
+    ruleId: string,
+    options?: {
+      operator?: string;
+      existingRule?: Partial<SafetyStockRuleDTO>;
+      previewData?: {
+        affectedHerbCount: number;
+        lowStockBeforeCount: number;
+        lowStockAfterCount: number;
+        suggestionDeltaTotal: number;
+      };
+    }
+  ) => Promise<OperationResult>;
+  ruleChangeLogs: import("./types").SafetyStockRuleChangeLogDTO[];
   inventoryStore: InventoryStore;
 }
 
@@ -2027,6 +2351,7 @@ export function useSafetyStockStore(
     addSafetyStockRule: asyncAddRule,
     updateSafetyStockRule: asyncUpdateRule,
     removeSafetyStockRule: asyncRemoveRule,
+    ruleChangeLogs,
   } = inventoryStore;
 
   const [optimisticState, setOptimisticState] =
@@ -2039,25 +2364,43 @@ export function useSafetyStockStore(
   }, [state]);
 
   const addRule = useCallback(
-    (input: NewSafetyStockRuleInput): string => {
+    async (
+      input: NewSafetyStockRuleInput & {
+        operator?: string;
+        previewData?: {
+          affectedHerbCount: number;
+          lowStockBeforeCount: number;
+          lowStockAfterCount: number;
+          suggestionDeltaTotal: number;
+        };
+      }
+    ): Promise<string | null> => {
       const optimisticResult = createSafetyStockRule(optimisticState, input);
       setOptimisticState(optimisticResult.state);
-      void (async () => {
-        const result = await asyncAddRule(input);
-        if (result === null) {
-          setOptimisticState(lastDbStateRef.current);
-        }
-      })();
+      const result = await asyncAddRule(input);
+      if (result === null) {
+        setOptimisticState(lastDbStateRef.current);
+        return null;
+      }
       return optimisticResult.ruleId;
     },
     [optimisticState, asyncAddRule]
   );
 
   const updateRule = useCallback(
-    (
+    async (
       ruleId: string,
-      input: Partial<NewSafetyStockRuleInput>
-    ): OperationResult => {
+      input: Partial<NewSafetyStockRuleInput> & {
+        operator?: string;
+        existingRule?: Partial<SafetyStockRuleDTO>;
+        previewData?: {
+          affectedHerbCount: number;
+          lowStockBeforeCount: number;
+          lowStockAfterCount: number;
+          suggestionDeltaTotal: number;
+        };
+      }
+    ): Promise<OperationResult> => {
       const optimisticResult = updateSafetyStockRule(
         optimisticState,
         ruleId,
@@ -2067,30 +2410,40 @@ export function useSafetyStockStore(
         return { ok: false, error: optimisticResult.error };
       }
       setOptimisticState(optimisticResult.state);
-      void (async () => {
-        const result = await asyncUpdateRule(ruleId, input);
-        if (!result.ok) {
-          setOptimisticState(lastDbStateRef.current);
-        }
-      })();
+      const result = await asyncUpdateRule(ruleId, input);
+      if (!result.ok) {
+        setOptimisticState(lastDbStateRef.current);
+        return result;
+      }
       return { ok: true };
     },
     [optimisticState, asyncUpdateRule]
   );
 
   const removeRule = useCallback(
-    (ruleId: string): OperationResult => {
+    async (
+      ruleId: string,
+      options?: {
+        operator?: string;
+        existingRule?: Partial<SafetyStockRuleDTO>;
+        previewData?: {
+          affectedHerbCount: number;
+          lowStockBeforeCount: number;
+          lowStockAfterCount: number;
+          suggestionDeltaTotal: number;
+        };
+      }
+    ): Promise<OperationResult> => {
       const optimisticResult = deleteSafetyStockRule(optimisticState, ruleId);
       if (!optimisticResult.ok || !optimisticResult.state) {
         return { ok: false, error: optimisticResult.error };
       }
       setOptimisticState(optimisticResult.state);
-      void (async () => {
-        const result = await asyncRemoveRule(ruleId);
-        if (!result.ok) {
-          setOptimisticState(lastDbStateRef.current);
-        }
-      })();
+      const result = await asyncRemoveRule(ruleId, options);
+      if (!result.ok) {
+        setOptimisticState(lastDbStateRef.current);
+        return result;
+      }
       return { ok: true };
     },
     [optimisticState, asyncRemoveRule]
@@ -2101,6 +2454,7 @@ export function useSafetyStockStore(
     addRule,
     updateRule,
     removeRule,
+    ruleChangeLogs,
     inventoryStore,
   };
 }

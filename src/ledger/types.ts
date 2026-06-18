@@ -30,6 +30,10 @@ export interface ConflictDetail {
 
 export const SCHEMA_VERSION = 1;
 
+export type SafetyStockCalcMode = "fixed" | "dynamic";
+
+export type RuleChangeAction = "create" | "update" | "delete" | "migrate";
+
 export interface BaseEntity {
   id: string;
   createdAt: string;
@@ -171,7 +175,12 @@ export interface SafetyStockRuleDTO extends BaseEntity {
   name: string;
   ruleType: SafetyStockRuleType;
   target: string;
+  calcMode: SafetyStockCalcMode;
   thresholdGrams: number;
+  consumptionDays?: number;
+  coverDays?: number;
+  minThresholdGrams?: number;
+  migratedFromV1?: boolean;
 }
 
 export interface SafetyStockState {
@@ -183,10 +192,14 @@ export interface NewSafetyStockRuleInput {
   name: string;
   ruleType: SafetyStockRuleType;
   target: string;
+  calcMode: SafetyStockCalcMode;
   thresholdGrams: number;
+  consumptionDays?: number;
+  coverDays?: number;
+  minThresholdGrams?: number;
 }
 
-export const SAFETY_STOCK_SCHEMA_VERSION = 1;
+export const SAFETY_STOCK_SCHEMA_VERSION = 2;
 
 export type PriorityLevel = "urgent" | "high" | "medium" | "low";
 
@@ -258,4 +271,50 @@ export interface NewExpiryAlertHandlingInput {
   batchId: string;
   handledBy?: string;
   remark?: string;
+}
+
+export interface SafetyStockRuleChangeLogDTO {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  action: RuleChangeAction;
+  operator: string;
+  before?: Partial<SafetyStockRuleDTO>;
+  after?: Partial<SafetyStockRuleDTO>;
+  affectedHerbCount: number;
+  lowStockBeforeCount: number;
+  lowStockAfterCount: number;
+  suggestionDeltaTotal: number;
+  remark?: string;
+  createdAt: string;
+}
+
+export interface SafetyStockRulePreviewItem {
+  name: string;
+  category: string;
+  totalStock: number;
+  unit: string;
+  thresholdBefore: number;
+  thresholdAfter: number;
+  isLowStockBefore: boolean;
+  isLowStockAfter: boolean;
+  lowStockStatusChanged: boolean;
+  suggestionBefore: number;
+  suggestionAfter: number;
+  suggestionDelta: number;
+  avgDailyConsumption: number;
+}
+
+export interface SafetyStockRulePreviewResult {
+  affectedHerbs: SafetyStockRulePreviewItem[];
+  newlyLowStock: SafetyStockRulePreviewItem[];
+  noLongerLowStock: SafetyStockRulePreviewItem[];
+  totalLowStockBefore: number;
+  totalLowStockAfter: number;
+  lowStockDelta: number;
+  totalSuggestionBefore: number;
+  totalSuggestionAfter: number;
+  totalSuggestionDelta: number;
+  avgDailyConsumptionSum: number;
+  explainText: string;
 }

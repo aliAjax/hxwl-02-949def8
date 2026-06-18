@@ -1,5 +1,5 @@
 export const DB_NAME = "hxwl_inventory_db";
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export const STORES = {
   HERBS: "herbs",
@@ -7,6 +7,7 @@ export const STORES = {
   OPERATIONS: "operations",
   AUDIT_LOGS: "audit_logs",
   SAFETY_STOCK_RULES: "safety_stock_rules",
+  SAFETY_STOCK_RULE_CHANGE_LOGS: "safety_stock_rule_change_logs",
   ROLE_PREFERENCES: "role_preferences",
   META: "meta",
   EXPIRY_ALERT_HANDLINGS: "expiry_alert_handlings",
@@ -87,12 +88,33 @@ export interface SafetyStockRuleRecord {
   name: string;
   ruleType: "category" | "herb";
   target: string;
+  calcMode: "fixed" | "dynamic";
   thresholdGrams: number;
+  consumptionDays?: number;
+  coverDays?: number;
+  minThresholdGrams?: number;
+  migratedFromV1?: boolean;
   createdAt: string;
   updatedAt: string;
   isDeleted: boolean;
   syncStatus: "pending" | "synced" | "conflict" | "error";
   serverId?: string;
+}
+
+export interface SafetyStockRuleChangeLogRecord {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  action: "create" | "update" | "delete" | "migrate";
+  operator: string;
+  beforeJson?: string;
+  afterJson?: string;
+  affectedHerbCount: number;
+  lowStockBeforeCount: number;
+  lowStockAfterCount: number;
+  suggestionDeltaTotal: number;
+  remark?: string;
+  createdAt: string;
 }
 
 export interface RolePreferenceRecord {
@@ -186,11 +208,32 @@ export const DEFAULT_SAFETY_STOCK_RULE: Omit<SafetyStockRuleRecord, never> = {
   name: "",
   ruleType: "category",
   target: "",
+  calcMode: "fixed",
   thresholdGrams: 0,
+  consumptionDays: undefined,
+  coverDays: undefined,
+  minThresholdGrams: undefined,
+  migratedFromV1: false,
   createdAt: "",
   updatedAt: "",
   isDeleted: false,
   syncStatus: "pending",
+};
+
+export const DEFAULT_SAFETY_STOCK_RULE_CHANGE_LOG: Omit<SafetyStockRuleChangeLogRecord, never> = {
+  id: "",
+  ruleId: "",
+  ruleName: "",
+  action: "create",
+  operator: "系统",
+  beforeJson: undefined,
+  afterJson: undefined,
+  affectedHerbCount: 0,
+  lowStockBeforeCount: 0,
+  lowStockAfterCount: 0,
+  suggestionDeltaTotal: 0,
+  remark: undefined,
+  createdAt: "",
 };
 
 export const DEFAULT_ROLE_PREFERENCE: Omit<RolePreferenceRecord, never> = {
@@ -257,9 +300,20 @@ export function fillSafetyStockRuleDefaults(
   return {
     ...DEFAULT_SAFETY_STOCK_RULE,
     ...raw,
+    calcMode: raw.calcMode ?? "fixed",
     isDeleted: raw.isDeleted ?? false,
     syncStatus: raw.syncStatus ?? "pending",
+    migratedFromV1: raw.migratedFromV1 ?? false,
   } as SafetyStockRuleRecord;
+}
+
+export function fillSafetyStockRuleChangeLogDefaults(
+  raw: Partial<SafetyStockRuleChangeLogRecord>
+): SafetyStockRuleChangeLogRecord {
+  return {
+    ...DEFAULT_SAFETY_STOCK_RULE_CHANGE_LOG,
+    ...raw,
+  } as SafetyStockRuleChangeLogRecord;
 }
 
 export function fillRolePreferenceDefaults(
@@ -477,6 +531,49 @@ export const MIGRATIONS: IndexedDBMigration[] = [
           handlingStore.createIndex("isHandled", "isHandled", { unique: false });
           handlingStore.createIndex("handledAt", "handledAt", { unique: false });
           handlingStore.createIndex("updatedAt", "updatedAt", { unique: false });
+        }
+      }
+    },
+  },
+  {
+    version: 4,
+    upgrade: (db, oldVersion, tx) => {
+      if (oldVersion < 4) {
+        if (!db.objectStoreNames.contains(STORES.SAFETY_STOCK_RULE_CHANGE_LOGS)) {
+          const changeLogStore = db.createObjectStore(STORES.SAFETY_STOCK_RULE_CHANGE_LOGS, {
+            keyPath: "id",
+          });
+          changeLogStore.createIndex("ruleId", "ruleId", { unique: false });
+          changeLogStore.createIndex("action", "action", { unique: false });
+          changeLogStore.createIndex("createdAt", "createdAt", { unique: false });
+          changeLogStore.createIndex("ruleId_createdAt", ["ruleId", "createdAt"], {
+            unique: false,
+          });
+        }
+
+        if (db.objectStoreNames.contains(STORES.SAFETY_STOCK_RULES)) {
+          const store = tx.objectStore(STORES.SAFETY_STOCK_RULES);
+          store.openCursor().onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest).result as
+              | IDBCursorWithValue
+              | undefined;
+            if (cursor) {
+              const value = cursor.value as Partial<SafetyStockRuleRecord>;
+              let changed = false;
+              if (!value.calcMode) {
+                value.calcMode = "fixed";
+                changed = true;
+              }
+              if (value.migratedFromV1 === undefined) {
+                value.migratedFromV1 = true;
+                changed = true;
+              }
+              if (changed) {
+                cursor.update(value);
+              }
+              cursor.continue();
+            }
+          };
         }
       }
     },

@@ -7,6 +7,7 @@ import {
   OperationRepository,
   RolePreferenceRepository,
   SafetyStockRuleRepository,
+  SafetyStockRuleChangeLogRepository,
   type WriteResult,
 } from "./repositories";
 import { InventoryService, type ExportData, type ImportPreview, type ImportValidationResult, validateImportData } from "./inventoryService";
@@ -18,6 +19,7 @@ import type {
   OperationRecord,
   RolePreferenceRecord,
   SafetyStockRuleRecord,
+  SafetyStockRuleChangeLogRecord,
 } from "./schema";
 import type {
   ExpiryAlertHandling,
@@ -28,6 +30,7 @@ import type {
   NewOperationInput,
   NewSafetyStockRuleInput,
   OperationResult,
+  SafetyStockRuleChangeLogDTO,
   SafetyStockState,
   SCHEMA_VERSION,
 } from "../types";
@@ -106,13 +109,15 @@ export function useInventoryStore() {
 
   const [herbs, setHerbs] = useState<HerbRecord[]>([]);
 
+  const [ruleChangeLogs, setRuleChangeLogs] = useState<SafetyStockRuleChangeLogDTO[]>([]);
+
   const clearWriteError = useCallback(() => {
     setStoreState((prev) => ({ ...prev, writeError: null }));
   }, []);
 
   const refreshAll = useCallback(async () => {
     try {
-      const [batches, operations, auditLogs, rules, prefs, handlings, herbsData] = await Promise.all([
+      const [batches, operations, auditLogs, rules, prefs, handlings, herbsData, changeLogs] = await Promise.all([
         BatchRepository.getAllSorted(),
         OperationRepository.getAll(),
         AuditLogRepository.getAll(),
@@ -120,12 +125,14 @@ export function useInventoryStore() {
         RolePreferenceRepository.getAll(),
         ExpiryAlertHandlingRepository.getAllAsMap(),
         HerbRepository.getAll(),
+        InventoryService.getSafetyStockRuleChangeLogs(),
       ]);
       setLedgerState(buildLedgerState(batches, operations, auditLogs, 1));
-      setSafetyStockState(buildSafetyStockState(rules, 1));
+      setSafetyStockState(buildSafetyStockState(rules, SAFETY_STOCK_SCHEMA_VERSION));
       setRolePreferences(prefs);
       setExpiryAlertHandlings(handlings);
       setHerbs(herbsData);
+      setRuleChangeLogs(changeLogs);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "加载数据失败";
       setStoreState((prev) => ({ ...prev, dbError: msg }));
@@ -246,7 +253,17 @@ export function useInventoryStore() {
   );
 
   const addSafetyStockRule = useCallback(
-    async (input: NewSafetyStockRuleInput): Promise<string | null> => {
+    async (
+      input: NewSafetyStockRuleInput & {
+        operator?: string;
+        previewData?: {
+          affectedHerbCount: number;
+          lowStockBeforeCount: number;
+          lowStockAfterCount: number;
+          suggestionDeltaTotal: number;
+        };
+      }
+    ): Promise<string | null> => {
       clearWriteError();
       const result = await InventoryService.createSafetyStockRule(input);
       if (!result.ok) {
@@ -268,7 +285,16 @@ export function useInventoryStore() {
   const updateSafetyStockRule = useCallback(
     async (
       ruleId: string,
-      input: Partial<NewSafetyStockRuleInput>
+      input: Partial<NewSafetyStockRuleInput> & {
+        operator?: string;
+        existingRule?: Partial<import("../types").SafetyStockRuleDTO>;
+        previewData?: {
+          affectedHerbCount: number;
+          lowStockBeforeCount: number;
+          lowStockAfterCount: number;
+          suggestionDeltaTotal: number;
+        };
+      }
     ): Promise<OperationResult> => {
       clearWriteError();
       const result = await InventoryService.updateSafetyStockRule(
@@ -288,9 +314,21 @@ export function useInventoryStore() {
   );
 
   const removeSafetyStockRule = useCallback(
-    async (ruleId: string): Promise<OperationResult> => {
+    async (
+      ruleId: string,
+      options?: {
+        operator?: string;
+        existingRule?: Partial<import("../types").SafetyStockRuleDTO>;
+        previewData?: {
+          affectedHerbCount: number;
+          lowStockBeforeCount: number;
+          lowStockAfterCount: number;
+          suggestionDeltaTotal: number;
+        };
+      }
+    ): Promise<OperationResult> => {
       clearWriteError();
-      const result = await InventoryService.deleteSafetyStockRule(ruleId);
+      const result = await InventoryService.deleteSafetyStockRule(ruleId, options);
       if (!result.ok) {
         setStoreState((prev) => ({
           ...prev,
@@ -632,6 +670,15 @@ export function useInventoryStore() {
     await InventoryService.markAllSynced();
   }, [clearWriteError]);
 
+  const refreshRuleChangeLogs = useCallback(async () => {
+    try {
+      const logs = await InventoryService.getSafetyStockRuleChangeLogs();
+      setRuleChangeLogs(logs);
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
   return {
     storeState,
     ledgerState,
@@ -639,6 +686,7 @@ export function useInventoryStore() {
     rolePreferences,
     expiryAlertHandlings,
     herbs,
+    ruleChangeLogs,
     clearWriteError,
     refreshAll,
     addBatch,
@@ -670,6 +718,7 @@ export function useInventoryStore() {
     resolveConflict,
     getConflictBatchDetails,
     markAllSynced,
+    refreshRuleChangeLogs,
   };
 }
 
