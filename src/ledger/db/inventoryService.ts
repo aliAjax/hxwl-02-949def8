@@ -9,7 +9,23 @@ import {
   nowIso,
   type WriteResult,
 } from "./repositories";
-import { STORES, type AuditLogRecord, type OperationRecord } from "./schema";
+import {
+  STORES,
+  fillAuditLogDefaults,
+  fillBatchDefaults,
+  fillExpiryAlertHandlingDefaults,
+  fillHerbDefaults,
+  fillOperationDefaults,
+  fillRolePreferenceDefaults,
+  fillSafetyStockRuleDefaults,
+  type AuditLogRecord,
+  type BatchRecord,
+  type ExpiryAlertHandlingRecord,
+  type HerbRecord,
+  type OperationRecord,
+  type RolePreferenceRecord,
+  type SafetyStockRuleRecord,
+} from "./schema";
 import { buildSeedData } from "./seed";
 import type {
   NewBatchAdjustmentInput,
@@ -29,6 +45,153 @@ export interface ExportData {
   herbs: unknown[];
   safetyStockRules: unknown[];
   rolePreferences: unknown[];
+  expiryAlertHandlings?: unknown[];
+}
+
+export const CURRENT_EXPORT_SCHEMA_VERSION = 2;
+
+export interface ImportPreview {
+  batchCount: number;
+  operationCount: number;
+  safetyStockRuleCount: number;
+  rolePreferenceCount: number;
+  herbCount: number;
+  auditLogCount: number;
+  expiryAlertHandlingCount: number;
+  exportedAt: string;
+  schemaVersion: number;
+}
+
+export interface ImportError {
+  type: "version" | "batchNo_conflict" | "field_missing" | "format" | "empty";
+  message: string;
+  details?: string[];
+}
+
+export type ImportValidationResult =
+  | { ok: true; preview: ImportPreview; warnings?: string[] }
+  | { ok: false; errors: ImportError[] };
+
+export function validateImportData(raw: unknown): ImportValidationResult {
+  const errors: ImportError[] = [];
+  const warnings: string[] = [];
+
+  if (!raw || typeof raw !== "object") {
+    return { ok: false, errors: [{ type: "format", message: "导入数据格式无效，不是有效的 JSON 对象" }] };
+  }
+
+  const data = raw as Record<string, unknown>;
+
+  if (!Array.isArray(data.batches) || !Array.isArray(data.operations)) {
+    return {
+      ok: false,
+      errors: [{ type: "format", message: "导入数据缺少必要的 batches 或 operations 字段" }],
+    };
+  }
+
+  if (typeof data.schemaVersion !== "number") {
+    errors.push({
+      type: "field_missing",
+      message: "缺少 schemaVersion 字段，无法确认数据版本",
+    });
+  } else if (data.schemaVersion > CURRENT_EXPORT_SCHEMA_VERSION) {
+    errors.push({
+      type: "version",
+      message: `数据版本 ${data.schemaVersion} 高于当前系统支持版本 ${CURRENT_EXPORT_SCHEMA_VERSION}，请升级应用后再导入`,
+    });
+  } else if (data.schemaVersion < 1) {
+    errors.push({
+      type: "version",
+      message: `数据版本 ${data.schemaVersion} 过低，不支持导入`,
+    });
+  }
+
+  if (!Array.isArray(data.herbs)) {
+    warnings.push("数据中缺少 herbs 字段，饮片信息将不会被导入");
+  }
+  if (!Array.isArray(data.safetyStockRules)) {
+    warnings.push("数据中缺少 safetyStockRules 字段，安全库存规则将不会被导入");
+  }
+  if (!Array.isArray(data.rolePreferences)) {
+    warnings.push("数据中缺少 rolePreferences 字段，角色偏好将不会被导入");
+  }
+
+  const requiredBatchFields = ["id", "batchNo", "name", "herbId"];
+  const batchMissingFieldsSet = new Set<string>();
+  const batchNos = new Set<string>();
+  const duplicateBatchNos: string[] = [];
+
+  const batches = (data.batches as Record<string, unknown>[]) || [];
+  for (const batch of batches) {
+    for (const field of requiredBatchFields) {
+      if (batch[field] === undefined || batch[field] === null || batch[field] === "") {
+        batchMissingFieldsSet.add(field);
+      }
+    }
+    const batchNo = String(batch.batchNo ?? "");
+    if (batchNo) {
+      if (batchNos.has(batchNo)) {
+        if (!duplicateBatchNos.includes(batchNo)) {
+          duplicateBatchNos.push(batchNo);
+        }
+      } else {
+        batchNos.add(batchNo);
+      }
+    }
+  }
+
+  if (batchMissingFieldsSet.size > 0) {
+    errors.push({
+      type: "field_missing",
+      message: `批号数据缺少必要字段：${Array.from(batchMissingFieldsSet).join("、")}`,
+      details: Array.from(batchMissingFieldsSet),
+    });
+  }
+
+  if (duplicateBatchNos.length > 0) {
+    errors.push({
+      type: "batchNo_conflict",
+      message: `导入数据内部存在重复批号：${duplicateBatchNos.join("、")}`,
+      details: duplicateBatchNos,
+    });
+  }
+
+  const requiredOpFields = ["id", "batchId", "type", "quantity"];
+  const opMissingFieldsSet = new Set<string>();
+  const operations = (data.operations as Record<string, unknown>[]) || [];
+  for (const op of operations) {
+    for (const field of requiredOpFields) {
+      if (op[field] === undefined || op[field] === null) {
+        opMissingFieldsSet.add(field);
+      }
+    }
+  }
+
+  if (opMissingFieldsSet.size > 0) {
+    errors.push({
+      type: "field_missing",
+      message: `流水数据缺少必要字段：${Array.from(opMissingFieldsSet).join("、")}`,
+      details: Array.from(opMissingFieldsSet),
+    });
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  const preview: ImportPreview = {
+    batchCount: batches.length,
+    operationCount: operations.length,
+    safetyStockRuleCount: Array.isArray(data.safetyStockRules) ? (data.safetyStockRules as unknown[]).length : 0,
+    rolePreferenceCount: Array.isArray(data.rolePreferences) ? (data.rolePreferences as unknown[]).length : 0,
+    herbCount: Array.isArray(data.herbs) ? (data.herbs as unknown[]).length : 0,
+    auditLogCount: Array.isArray(data.auditLogs) ? (data.auditLogs as unknown[]).length : 0,
+    expiryAlertHandlingCount: Array.isArray(data.expiryAlertHandlings) ? (data.expiryAlertHandlings as unknown[]).length : 0,
+    exportedAt: typeof data.exportedAt === "string" ? data.exportedAt : "",
+    schemaVersion: typeof data.schemaVersion === "number" ? data.schemaVersion : 0,
+  };
+
+  return { ok: true, preview, warnings: warnings.length > 0 ? warnings : undefined };
 }
 
 export class InventoryService {
@@ -488,7 +651,7 @@ export class InventoryService {
   static async exportConsistentSnapshot(): Promise<ExportData> {
     const snapshot = await inventoryDB.getConsistentSnapshot();
     return {
-      schemaVersion: 1,
+      schemaVersion: CURRENT_EXPORT_SCHEMA_VERSION,
       exportedAt: nowIso(),
       batches: snapshot.batches,
       operations: snapshot.operations,
@@ -496,7 +659,99 @@ export class InventoryService {
       herbs: snapshot.herbs,
       safetyStockRules: snapshot.safetyStockRules,
       rolePreferences: snapshot.rolePreferences,
+      expiryAlertHandlings: snapshot.expiryAlertHandlings,
     };
+  }
+
+  static async checkBatchNoConflicts(
+    incomingBatches: unknown[]
+  ): Promise<string[]> {
+    const existingBatches = await inventoryDB.getAll<BatchRecord>(STORES.BATCHES);
+    const existingBatchNos = new Set(
+      existingBatches.map((b) => b.batchNo)
+    );
+    const conflicts: string[] = [];
+    for (const raw of incomingBatches) {
+      const batch = raw as Record<string, unknown>;
+      const batchNo = String(batch.batchNo ?? "");
+      if (batchNo && existingBatchNos.has(batchNo)) {
+        conflicts.push(batchNo);
+      }
+    }
+    return conflicts;
+  }
+
+  static async importConsistentSnapshot(
+    data: ExportData
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      const herbs = ((data.herbs as Partial<HerbRecord>[]) || []).map(fillHerbDefaults);
+      const batches = ((data.batches as Partial<BatchRecord>[]) || []).map(fillBatchDefaults);
+      const operations = ((data.operations as Partial<OperationRecord>[]) || []).map(fillOperationDefaults);
+      const auditLogs = ((data.auditLogs as Partial<AuditLogRecord>[]) || []).map(fillAuditLogDefaults);
+      const safetyStockRules = ((data.safetyStockRules as Partial<SafetyStockRuleRecord>[]) || []).map(fillSafetyStockRuleDefaults);
+      const rolePreferences = ((data.rolePreferences as Partial<RolePreferenceRecord>[]) || []).map(fillRolePreferenceDefaults);
+
+      const expiryAlertHandlings = Array.isArray(data.expiryAlertHandlings)
+        ? ((data.expiryAlertHandlings as Partial<ExpiryAlertHandlingRecord>[]) || []).map(fillExpiryAlertHandlingDefaults)
+        : [];
+
+      await inventoryDB.withTransaction(
+        [
+          STORES.HERBS,
+          STORES.BATCHES,
+          STORES.OPERATIONS,
+          STORES.AUDIT_LOGS,
+          STORES.SAFETY_STOCK_RULES,
+          STORES.ROLE_PREFERENCES,
+          STORES.EXPIRY_ALERT_HANDLINGS,
+          STORES.META,
+        ],
+        "readwrite",
+        (stores) => {
+          stores[STORES.HERBS].clear();
+          stores[STORES.BATCHES].clear();
+          stores[STORES.OPERATIONS].clear();
+          stores[STORES.AUDIT_LOGS].clear();
+          stores[STORES.SAFETY_STOCK_RULES].clear();
+          stores[STORES.ROLE_PREFERENCES].clear();
+          stores[STORES.EXPIRY_ALERT_HANDLINGS].clear();
+
+          for (const h of herbs) {
+            stores[STORES.HERBS].put(h);
+          }
+          for (const b of batches) {
+            stores[STORES.BATCHES].put(b);
+          }
+          for (const op of operations) {
+            stores[STORES.OPERATIONS].put(op);
+          }
+          for (const log of auditLogs) {
+            stores[STORES.AUDIT_LOGS].put(log);
+          }
+          for (const rule of safetyStockRules) {
+            stores[STORES.SAFETY_STOCK_RULES].put(rule);
+          }
+          for (const pref of rolePreferences) {
+            stores[STORES.ROLE_PREFERENCES].put(pref);
+          }
+          for (const handling of expiryAlertHandlings) {
+            stores[STORES.EXPIRY_ALERT_HANDLINGS].put(handling);
+          }
+
+          stores[STORES.META].put({
+            key: this.SEED_FLAG,
+            value: true,
+            updatedAt: nowIso(),
+          });
+        }
+      );
+
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "导入数据写入失败";
+      return { ok: false, error: msg };
+    }
   }
 
   static async markAllSynced(): Promise<void> {

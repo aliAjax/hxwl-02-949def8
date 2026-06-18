@@ -8,6 +8,7 @@ import ProcurementSuggestionModule from "./ledger/ProcurementSuggestionModule";
 import RestockSuggestionPage from "./ledger/RestockSuggestionPage";
 import RoleWorkspaceModule from "./ledger/RoleWorkspaceModule";
 import HerbAutocomplete from "./ledger/HerbAutocomplete";
+import ImportModal from "./ledger/ImportModal";
 import type { HerbSuggestion } from "./ledger/HerbAutocomplete";
 import {
   checkBatchNoExists,
@@ -167,7 +168,8 @@ function App() {
   const safetyStockStore = useSafetyStockStore();
   const { state: safetyStockState } = safetyStockStore;
 
-  const { storeState: invStoreState, clearWriteError, resetAll, exportSnapshot, herbs } =
+  const { storeState: invStoreState, clearWriteError, resetAll, exportSnapshot, herbs,
+    validateImportFile, checkBatchNoConflicts, importSnapshot } =
     ledgerStore.inventoryStore;
 
   const lowStockHerbCount = useMemo(
@@ -192,6 +194,7 @@ function App() {
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [tab, setTab] = useState<"entry" | "ledger" | "alert" | "safety" | "lowstock" | "procurement" | "restock" | "workspace">("workspace");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const records = useMemo<InventoryRecord[]>(() => {
     const batches = selectAllBatches(ledgerState);
@@ -407,6 +410,13 @@ function App() {
               📤 导出数据
             </button>
             <button
+              className="mini-btn"
+              onClick={() => setShowImportModal(true)}
+              title="导入 IndexedDB 库存 JSON 快照"
+            >
+              📥 导入数据
+            </button>
+            <button
               className="mini-btn mini-danger"
               onClick={() => setShowResetConfirm(true)}
               title="清空并重新初始化示例数据"
@@ -433,6 +443,14 @@ function App() {
           </div>
         </div>
       )}
+
+      <ImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={importSnapshot}
+        validateImportFile={validateImportFile}
+        checkBatchNoConflicts={checkBatchNoConflicts}
+      />
 
       <nav className="tab-bar">
         <button

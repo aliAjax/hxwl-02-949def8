@@ -9,7 +9,7 @@ import {
   SafetyStockRuleRepository,
   type WriteResult,
 } from "./repositories";
-import { InventoryService, type ExportData } from "./inventoryService";
+import { InventoryService, type ExportData, type ImportPreview, type ImportValidationResult, validateImportData } from "./inventoryService";
 import { inventoryDB } from "./database";
 import type {
   AuditLogRecord,
@@ -313,6 +313,35 @@ export function useInventoryStore() {
     }
   }, []);
 
+  const validateImportFile = useCallback(
+    (raw: unknown): ImportValidationResult => {
+      return validateImportData(raw);
+    },
+    []
+  );
+
+  const checkBatchNoConflicts = useCallback(
+    async (batches: unknown[]): Promise<string[]> => {
+      return InventoryService.checkBatchNoConflicts(batches);
+    },
+    []
+  );
+
+  const importSnapshot = useCallback(
+    async (data: ExportData): Promise<{ ok: true } | { ok: false; error: string }> => {
+      clearWriteError();
+      const result = await InventoryService.importConsistentSnapshot(data);
+      if (!result.ok) {
+        setStoreState((prev) => ({
+          ...prev,
+          writeError: result.error,
+        }));
+      }
+      return result;
+    },
+    [clearWriteError]
+  );
+
   const updateRolePreference = useCallback(
     async (
       data: Partial<RolePreferenceRecord> & {
@@ -574,6 +603,9 @@ export function useInventoryStore() {
     updateSafetyStockRule,
     removeSafetyStockRule,
     exportSnapshot,
+    validateImportFile,
+    checkBatchNoConflicts,
+    importSnapshot,
     updateRolePreference,
     addRecentSearch,
     updateWarehouseOpType,
