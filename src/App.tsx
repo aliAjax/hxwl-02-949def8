@@ -69,6 +69,7 @@ const project = {
     { key: "expiry", label: "有效期" },
     { key: "stockGrams", label: "库存克数" },
     { key: "category", label: "功效分类" },
+    { key: "unit", label: "单位" },
     { key: "operator", label: "操作人" },
     { key: "remark", label: "备注" }
   ] as const,
@@ -82,6 +83,7 @@ const emptyForm: Record<string, string> = {
   expiry: "",
   stockGrams: "",
   category: "",
+  unit: "g",
   operator: "",
   remark: "",
 };
@@ -232,8 +234,9 @@ function App() {
         spec: suggestion.spec,
         origin: suggestion.origin,
         category: suggestion.category,
+        unit: suggestion.unit,
       }));
-      ["name", "spec", "origin", "category"].forEach((key) => {
+      ["name", "spec", "origin", "category", "unit"].forEach((key) => {
         setErrors((prev) => {
           if (!prev[key]) return prev;
           const next = { ...prev };
@@ -287,7 +290,7 @@ function App() {
         category: formData.category.trim(),
         batchNo: formData.batch.trim(),
         expiry: formData.expiry.trim(),
-        unit: "g",
+        unit: formData.unit.trim() || "g",
         initialStock: Number(formData.stockGrams),
         operator: formData.operator.trim() || "录入员",
         remark: formData.remark.trim() || "库存录入看板新增",
